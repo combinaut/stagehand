@@ -20,6 +20,7 @@ module Stagehand
 
         begin
           block.call(start_operation)
+          start_operation.subject = subject_record if !start_operation.record_id? && subject_record&.persisted? # Set the subject if it wasn't persisted when the commit started, but now it is.
         rescue Exception => e # Rescue Exception because we don't want to swallow them by returning from the ensure block
           raise(e)
         ensure
