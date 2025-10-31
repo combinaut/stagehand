@@ -1,6 +1,6 @@
-## Stagehand [![Gem Version](https://badge.fury.io/rb/culturecode_stagehand.svg)](https://badge.fury.io/rb/culturecode_stagehand)
+## Stagehand [![Gem Version](https://badge.fury.io/rb/combinaut_stagehand.svg)](https://badge.fury.io/rb/combinaut_stagehand)
 
-By [Culture Code](http://culturecode.ca/).
+By [Culture Code](http://combinaut.ca/).
 
 **Stagehand** is a gem that makes it easy to have a staging database where content editors can modify highly relational
 data, and then publish those changes to a production database. It aims to solve the problem of being able to publish
@@ -26,7 +26,7 @@ Stagehand currently supports MySQL, but does not use any exotic commands and sho
 1. Add **Stagehand** to your Gemfile:
 
   ```ruby
-  gem 'stagehand', :github => 'culturecode/stagehand'
+  gem 'stagehand', :github => 'combinaut/stagehand'
   ```
 
 2. Make a copy of your existing database, this will serve as the Production database, while your current database will

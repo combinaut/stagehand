@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    culturecode_stagehand (1.2.0)
+    combinaut_stagehand (1.2.0)
       mysql2
       rails (>= 4.2, < 6)
       ruby-graphviz
@@ -177,8 +177,8 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  combinaut_stagehand!
   combustion (~> 1.3.0)
-  culturecode_stagehand!
   database_cleaner
   pry
   pry-byebug
