@@ -30,7 +30,7 @@ namespace :stagehand do
     end
 
     # Enhance the original task to run the stagehand_task as a prerequisite
-    Rake::Task[task].enhance(["stagehand:#{stagehand_task}"])
+    Rake::Task[task].enhance(["stagehand:#{stagehand_task}"]) unless Stagehand::Configuration.single_connection?
   end
 
   rake_both_databases('db:create')
