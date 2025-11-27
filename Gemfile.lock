@@ -3,7 +3,7 @@ PATH
   specs:
     combinaut_stagehand (1.2.0)
       mysql2
-      rails (>= 4.2, < 6)
+      rails (>= 4.2, < 6.1)
       ruby-graphviz
 
 GEM
