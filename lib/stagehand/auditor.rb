@@ -84,7 +84,7 @@ module Stagehand
 
     # Commit that is missing a start or end operation
     def incomplete_commit_ids
-      Staging::CommitEntry.control_operations.group(:commit_id).having("count(*) != 2").pluck("MIN(commit_id)")
+      Staging::CommitEntry.control_operations.group(:commit_id).having("count(*) != 2").pluck(Arel.sql("MIN(commit_id)"))
     end
   end
 end
