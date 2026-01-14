@@ -581,6 +581,16 @@ To upgrade, first run the Auditor from 1.1.x and deal with any incomplete commit
   end
   ```
 
+## Upgrading from < 1.2.3 to 1.2.3
+
+The commit entry creation triggers were updated to record a UTC timestamp instead of a timestamp in the system timezone in order to match the default behaviour of ActiveRecord. It is recommended to regenerate
+the triggers for each stagehand table.
+
+```ruby
+tables = ActiveRecord::Base.connection.tables.select {|table_name| Stagehand::Schema.has_stagehand?(table_name) }
+Stagehand::Schema.add_stagehand!(only: tables, force: true)
+```
+
 ## Possible Caveats to double check when development is complete
 - A transaction is opened on the staging and production databases when syncing. This reduces the timing window where the
 sync process could be killed after the production database write, but before the staging database write had completed,
