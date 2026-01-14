@@ -12,19 +12,21 @@
 
 ActiveRecord::Schema.define(version: 0) do
 
-  create_table "constrained_records", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci", force: :cascade, stagehand: true do |t|
+  create_table "constrained_records", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci", force: :cascade, stagehand: true do |t|
     t.integer "unique_number"
+    t.bigint "source_record_id"
+    t.index ["source_record_id"], name: "index_constrained_records_on_source_record_id"
     t.index ["unique_number"], name: "index_constrained_records_on_unique_number", unique: true
   end
 
-  create_table "habtm_records", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci", force: :cascade, stagehand: true do |t|
+  create_table "habtm_records", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci", force: :cascade, stagehand: true do |t|
   end
 
-  create_table "serialized_column_records", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci", force: :cascade, stagehand: true do |t|
+  create_table "serialized_column_records", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci", force: :cascade, stagehand: true do |t|
     t.text "tags"
   end
 
-  create_table "source_records", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci", force: :cascade, stagehand: true do |t|
+  create_table "source_records", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci", force: :cascade, stagehand: true do |t|
     t.string "name"
     t.integer "counter"
     t.string "type"
@@ -40,7 +42,7 @@ ActiveRecord::Schema.define(version: 0) do
     t.index ["user_id"], name: "index_source_records_on_user_id"
   end
 
-  create_table "stagehand_commit_entries", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci", force: :cascade, stagehand: :commit_entries do |t|
+  create_table "stagehand_commit_entries", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci", force: :cascade, stagehand: :commit_entries do |t|
     t.integer "record_id"
     t.string "table_name"
     t.string "operation", null: false
@@ -52,7 +54,7 @@ ActiveRecord::Schema.define(version: 0) do
     t.index ["record_id", "table_name", "committed"], name: "index_stagehand_commit_entries_for_matching"
   end
 
-  create_table "target_assignments", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci", force: :cascade, stagehand: true do |t|
+  create_table "target_assignments", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci", force: :cascade, stagehand: true do |t|
     t.bigint "source_record_id"
     t.bigint "target_id"
     t.integer "counter"
@@ -62,9 +64,10 @@ ActiveRecord::Schema.define(version: 0) do
     t.index ["target_id"], name: "index_target_assignments_on_target_id"
   end
 
-  create_table "users", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci", force: :cascade, stagehand: false do |t|
+  create_table "users", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci", force: :cascade, stagehand: false do |t|
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
   end
 
+  add_foreign_key "constrained_records", "source_records"
 end
