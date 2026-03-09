@@ -88,7 +88,7 @@ end
 
 module StagehandAssociationReflection
   # SOURCE: https://github.com/rails/rails/blob/a4581b53aae93a8dd3205abae0630398cbce9204/activerecord/lib/active_record/reflection.rb#L429
-  def initialize(*)
+  def initialize(*, **)
     super
     @association_scope_cache = StagehandAssociationScopeCache.new
   end
