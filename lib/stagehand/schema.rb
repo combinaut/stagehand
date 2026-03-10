@@ -32,7 +32,7 @@ module Stagehand
       return if Database.connected_to_production? && !Stagehand::Configuration.single_connection?
 
       ActiveRecord::Schema.define do
-        Stagehand::Schema.send :each_table, table_options do |table_name|
+        Stagehand::Schema.send :each_table, **table_options do |table_name|
           Stagehand::Schema.send :create_operation_trigger, table_name, 'insert', 'NEW', force: force
           Stagehand::Schema.send :create_operation_trigger, table_name, 'update', 'NEW', force: force
           Stagehand::Schema.send :create_operation_trigger, table_name, 'delete', 'OLD', force: force
@@ -42,7 +42,7 @@ module Stagehand
 
     def remove_stagehand!(remove_entries: true, **table_options)
       ActiveRecord::Schema.define do
-        Stagehand::Schema.send :each_table, table_options do |table_name|
+        Stagehand::Schema.send :each_table, **table_options do |table_name|
           next unless Stagehand::Schema.send :has_stagehand_triggers?, table_name
           Stagehand::Schema.send :drop_trigger, table_name, 'insert'
           Stagehand::Schema.send :drop_trigger, table_name, 'update'
