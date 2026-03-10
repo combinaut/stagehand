@@ -2,9 +2,8 @@ module Stagehand
   module Schema
     module Statements
       # Ensure that developers are aware they need to make a determination of whether stagehand should track this table or not
-      def create_table(table_name, options = {})
+      def create_table(table_name, **options)
         super
-        options = options.symbolize_keys
 
         return if Database.connected_to_production? && !Stagehand::Configuration.single_connection?
         return if options[:stagehand] == false
@@ -22,7 +21,7 @@ module Stagehand
         Staging::CommitEntry.where(:table_name => old_table_name).update_all(:table_name => new_table_name)
       end
 
-      def drop_table(table_name, *)
+      def drop_table(table_name, *, **)
         return super unless Schema.has_stagehand?(table_name) && table_exists?(Staging::CommitEntry.table_name)
 
         Schema.remove_stagehand!(:only => table_name, :remove_entries => true)
