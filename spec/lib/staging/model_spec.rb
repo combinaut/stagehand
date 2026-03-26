@@ -131,4 +131,20 @@ describe Stagehand::Staging::Model do
       end
     end
   end
+
+  describe 'staging_model_tables registration' do
+    it 'registers concrete subclasses of an abstract staging model' do
+      expect(Stagehand::Configuration.staging_model_tables).not_to include("concrete_dummy_staging_models")
+
+      class AbstractDummyStagingModel < ActiveRecord::Base
+        self.abstract_class = true
+        include Stagehand::Staging::Model
+      end
+
+      class ConcreteDummyStagingModel < AbstractDummyStagingModel
+      end
+
+      expect(Stagehand::Configuration.staging_model_tables).to include(ConcreteDummyStagingModel.table_name)
+    end
+  end
 end
