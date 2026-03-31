@@ -1,16 +1,14 @@
 ENV['RAILS_ENV'] ||= 'test'
 
-require 'bundler'
-Bundler.require :default, :development
-
-Combustion.initialize! :all do
-  config.x.stagehand.production_connection_name = :production
-end
+require_relative 'internal/config/environment'
 
 # Prevent database truncation if the environment is production
 abort("The Rails environment is running in production mode!") if Rails.env.production?
 
 require 'rspec/rails'
+
+# Only needed for tests
+require 'database_cleaner/active_record'
 
 # Add additional requires below this line. Rails is not loaded until this point!
 

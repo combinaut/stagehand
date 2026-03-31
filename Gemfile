@@ -10,6 +10,9 @@ gemspec
 # Git. Remember to move these dependencies to your gemspec before releasing
 # your gem to rubygems.org.
 
+gem 'appraisal'
+gem 'benchmark'
+
 # To use a debugger
 # gem 'byebug', group: [:development, :test]
 
