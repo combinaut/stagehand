@@ -7,14 +7,17 @@ describe Stagehand::Staging::Model do
   let(:staging) { Rails.configuration.database_configuration[Stagehand.configuration.staging_connection_name.to_s] }
 
   it 'establishes a connection to the staging database when included in a model' do
-    klass.connection_specification_name = Stagehand.configuration.production_connection_name
-    expect { klass.include(subject) }.to change { klass.connection.current_database }.to(staging['database'])
+    Stagehand::Database.with_production_connection do
+      klass.include(subject)
+      expect(klass.connection.current_database).to eq(staging['database'])
+    end
   end
 
   in_ghost_mode do
     it 'does not change the connection when included in a model' do
-      klass.connection_specification_name = Stagehand.configuration.production_connection_name
-      expect { klass.include(subject) }.not_to change { klass.connection.current_database }
+      Stagehand::Database.with_production_connection do
+        expect { klass.include(subject) }.not_to change { klass.connection.current_database }
+      end
     end
   end
 
@@ -76,7 +79,9 @@ describe Stagehand::Staging::Model do
     end
 
     it 'can load an association of a staging model while on the production connection after calling that association on the staging connection' do
-      record = TargetAssignment.create!(:source_record => klass.new)
+      source = klass.create!
+      Stagehand::Production.save(source)
+      record = TargetAssignment.create!(:source_record => source)
       Stagehand::Database.with_staging_connection do
         record.association(:source_record).reload
       end

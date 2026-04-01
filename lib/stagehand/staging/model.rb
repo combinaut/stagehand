@@ -26,6 +26,8 @@ module Stagehand
         def connection_pool
           if Configuration.ghost_mode? || Configuration.single_connection?
             super
+          elsif Stagehand::Database.connected_to_staging?
+            ActiveRecord::Base.connection_pool # Reuse existing pool so we stay within the current transaction
           else
             Stagehand::Database::StagingProbe.connection_pool
           end
