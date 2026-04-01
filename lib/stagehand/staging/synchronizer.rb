@@ -81,8 +81,6 @@ module Stagehand
       end
 
       def sync_checklist(checklist, **opts)
-        return if Configuration.single_connection? # Nothing to sync when both databases are the same
-
         Database.transaction do
           checklist.syncing_entries.each do |entry|
             if checklist.subject_entries.include?(entry)
