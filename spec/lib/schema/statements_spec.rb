@@ -8,7 +8,7 @@ describe Stagehand::Schema::Statements do
       ActiveRecord::Schema.define { drop_table('doodads') }
     end
 
-    let(:entry) { Stagehand::Staging::CommitEntry.save_operations.create!(:table_name => 'widgets', :record_id => 1) }
+    let(:entry) { Stagehand::Staging::CommitEntry.insert_operations.create!(:table_name => 'widgets', :record_id => 1) }
 
     it 'updates the table name column of commit entries for the given table' do
       create_table('widgets', :stagehand => true)
