@@ -65,6 +65,7 @@ module Stagehand
         classes = ActiveRecord::Base.descendants
         classes.select! {|klass| klass.table_name == table_name }
         classes.reject! {|klass| klass < Stagehand::Database::Probe }
+        classes.reject! {|klass| klass.module_parents.include?(Stagehand::DummyClass) }
         return classes.first || table_name.classify.constantize.base_class # Try loading the class if it isn't loaded yet
       rescue NameError
         raise(IndeterminateRecordClass, "Can't determine class from table name: #{table_name}")
