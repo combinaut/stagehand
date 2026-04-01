@@ -70,7 +70,11 @@ def set_then_clear_connection_for_class(klass, connection_name, &block)
     production: { writing: connection_name }
   }
   klass.abstract_class = false
-  block.call
+  ActiveRecord::Base.connected_to(shard: :staging, role: :writing) do
+    block.call
+  end
 ensure
   klass.remove_connection
+  # Ensure the class falls back to ActiveRecord::Base's pool after cleanup.
+  klass.connection_specification_name = ActiveRecord::Base.connection_specification_name
 end
