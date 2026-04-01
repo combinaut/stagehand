@@ -2,7 +2,7 @@ module Stagehand
   module Schema
     module Statements
       # Ensure that developers are aware they need to make a determination of whether stagehand should track this table or not
-      def create_table(table_name, stagehand: false, **options)
+      def create_table(table_name, stagehand: nil, **options)
         super(table_name, **options)
 
         return if Database.connected_to_production? && !Stagehand::Configuration.single_connection?
