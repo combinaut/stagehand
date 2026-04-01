@@ -3,8 +3,8 @@ describe Stagehand::Production do
   let(:source_record) { SourceRecord.create }
 
   in_single_connection_mode do
-    it 'uses the same connection object as ActiveRecord::Base' do
-      expect(Stagehand::Production::Record.connection).to be_equal(ActiveRecord::Base.connection)
+    it 'uses the same connection pool as ActiveRecord::Base' do
+      expect(Stagehand::Production::Record.connection_pool).to eq(ActiveRecord::Base.connection_pool)
     end
   end
 
