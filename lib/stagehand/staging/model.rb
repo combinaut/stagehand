@@ -27,6 +27,8 @@ module Stagehand
           if Configuration.ghost_mode? || Configuration.single_connection?
             super
           else
+            # Keep pool lookup pinned to staging; connection() may still reuse
+            # ActiveRecord::Base.connection when a staging transaction is active.
             ActiveRecord::Base.connected_to(shard: :staging, role: :writing) do
               ActiveRecord::Base.connection_pool
             end
@@ -41,6 +43,10 @@ module Stagehand
         def connection
           if Configuration.ghost_mode? || Configuration.single_connection?
             super
+          elsif Stagehand::Database.connected_to_staging? && ActiveRecord::Base.connection.transaction_open?
+            # Reuse Base's active staging transaction connection so writes stay inside
+            # the surrounding transaction (e.g. ActiveRecord::Base.transaction).
+            ActiveRecord::Base.connection
           else
             ActiveRecord::Base.connected_to(shard: :staging, role: :writing) do
               ActiveRecord::Base.connection
