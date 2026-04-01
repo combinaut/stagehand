@@ -38,47 +38,31 @@ ActiveRecord::Base.class_eval do
 end
 
 module StagehandAssociationReflection
-  # SOURCE: https://github.com/rails/rails/blob/a4581b53aae93a8dd3205abae0630398cbce9204/activerecord/lib/active_record/reflection.rb#L429
-  def initialize(*, **)
-    super
-    @association_scope_cache = StagehandAssociationScopeCache.new
-  end
-
-  # Rails 8 caches association statements via AssociationReflection#association_scope_cache
-  # using cached_find_by_statement. Include Stagehand connection context in the cache key
-  # so scopes built in staging are not reused in production.
+  # Rails 6.1+ caches association statements via AssociationReflection#association_scope_cache.
+  # Include Stagehand connection context in the key so scopes built in staging
+  # are not reused in production.
   def association_scope_cache(klass, owner, &block)
     key = self
     key = [key, owner._read_attribute(@foreign_type)] if polymorphic?
 
-    klass.with_connection do |connection|
-      adapter_db = if connection.respond_to?(:connection_db_config)
-        connection.connection_db_config.database
-      else
-        connection.current_database
+    if klass.method(:cached_find_by_statement).arity >= 2
+      klass.with_connection do |connection|
+        context_key = [key, stagehand_adapter_database(connection), Stagehand::Database.connected_to_production?]
+        klass.cached_find_by_statement(connection, context_key, &block)
       end
-
-      context_key = [key, adapter_db, Stagehand::Database.connected_to_production?]
-      klass.cached_find_by_statement(connection, context_key, &block)
+    else
+      context_key = [key, stagehand_adapter_database(klass.connection), Stagehand::Database.connected_to_production?]
+      klass.cached_find_by_statement(context_key, &block)
     end
   end
 
-  # Ensure the association query statements are cached separately for the staging and production connections or else
-  # queries for Staging Models may cache the database name for the wrong connection.
-  class StagehandAssociationScopeCache < Delegator
-    def initialize
-      @staging_cache = Concurrent::Map.new
-      @production_cache = Concurrent::Map.new
-    end
+  private
 
-    def __getobj__
-      adapter_db = if ActiveRecord::Base.connection.respond_to?(:connection_db_config)
-        ActiveRecord::Base.connection.connection_db_config.database
-      else
-        ActiveRecord::Base.connection.current_database
-      end
-
-      adapter_db == Stagehand::Database.production_database_name ? @production_cache : @staging_cache
+  def stagehand_adapter_database(connection)
+    if connection.respond_to?(:connection_db_config)
+      connection.connection_db_config.database
+    else
+      connection.current_database
     end
   end
 end
