@@ -12,9 +12,15 @@ gemspec
 
 gem 'appraisal'
 gem 'benchmark'
+gem 'drb'
+gem 'logger'
+gem 'mutex_m'
+gem 'ostruct'
 
 # To use a debugger
 # gem 'byebug', group: [:development, :test]
 
-gem 'pry'
-gem 'pry-byebug'
+group :development do
+	gem 'pry'
+	gem 'pry-byebug'
+end

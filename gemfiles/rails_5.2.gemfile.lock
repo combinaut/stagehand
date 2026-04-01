@@ -71,6 +71,7 @@ GEM
     database_cleaner-core (2.0.1)
     date (3.5.1)
     diff-lcs (1.6.2)
+    drb (2.2.3)
     erubi (1.13.1)
     globalid (1.1.0)
       activesupport (>= 5.0)
@@ -90,6 +91,7 @@ GEM
     method_source (1.1.0)
     mini_mime (1.1.5)
     minitest (5.26.1)
+    mutex_m (0.3.0)
     mysql2 (0.5.7)
       bigdecimal
     net-imap (0.4.23)
@@ -104,6 +106,7 @@ GEM
     nio4r (2.7.5)
     nokogiri (1.19.2-arm64-darwin)
       racc (~> 1.4)
+    ostruct (0.6.3)
     pry (0.14.2)
       coderay (~> 1.1)
       method_source (~> 1.0)
@@ -188,6 +191,10 @@ DEPENDENCIES
   benchmark
   combinaut_stagehand!
   database_cleaner
+  drb
+  logger
+  mutex_m
+  ostruct
   pry
   pry-byebug
   rails (~> 5.2.0)

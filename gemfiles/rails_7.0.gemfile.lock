@@ -138,6 +138,7 @@ GEM
     nio4r (2.7.5)
     nokogiri (1.19.2-arm64-darwin)
       racc (~> 1.4)
+    ostruct (0.6.3)
     pry (0.16.0)
       coderay (~> 1.1)
       method_source (~> 1.0)
@@ -220,6 +221,10 @@ DEPENDENCIES
   benchmark
   combinaut_stagehand!
   database_cleaner
+  drb
+  logger
+  mutex_m
+  ostruct
   pry
   pry-byebug
   rails (~> 7.0.0)

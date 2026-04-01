@@ -132,6 +132,7 @@ GEM
     method_source (1.1.0)
     mini_mime (1.1.5)
     minitest (5.27.0)
+    mutex_m (0.3.0)
     mysql2 (0.5.7)
       bigdecimal
     net-imap (0.6.3)
@@ -146,6 +147,7 @@ GEM
     nio4r (2.7.5)
     nokogiri (1.19.2-arm64-darwin)
       racc (~> 1.4)
+    ostruct (0.6.3)
     pp (0.6.3)
       prettyprint
     prettyprint (0.2.0)
@@ -249,6 +251,10 @@ DEPENDENCIES
   benchmark
   combinaut_stagehand!
   database_cleaner
+  drb
+  logger
+  mutex_m
+  ostruct
   pry
   pry-byebug
   rails (~> 7.2.0)
