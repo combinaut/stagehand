@@ -44,6 +44,25 @@ module StagehandAssociationReflection
     @association_scope_cache = StagehandAssociationScopeCache.new
   end
 
+  # Rails 8 caches association statements via AssociationReflection#association_scope_cache
+  # using cached_find_by_statement. Include Stagehand connection context in the cache key
+  # so scopes built in staging are not reused in production.
+  def association_scope_cache(klass, owner, &block)
+    key = self
+    key = [key, owner._read_attribute(@foreign_type)] if polymorphic?
+
+    klass.with_connection do |connection|
+      adapter_db = if connection.respond_to?(:connection_db_config)
+        connection.connection_db_config.database
+      else
+        connection.current_database
+      end
+
+      context_key = [key, adapter_db, Stagehand::Database.connected_to_production?]
+      klass.cached_find_by_statement(connection, context_key, &block)
+    end
+  end
+
   # Ensure the association query statements are cached separately for the staging and production connections or else
   # queries for Staging Models may cache the database name for the wrong connection.
   class StagehandAssociationScopeCache < Delegator
@@ -65,26 +84,3 @@ module StagehandAssociationReflection
 end
 
 ActiveRecord::Reflection::AssociationReflection.prepend(StagehandAssociationReflection)
-
-# Recompute association scopes when the underlying connection database changes
-# (e.g., switching between staging and production shards). Without this, a scope
-# cached under staging can be reused after switching to production, leading to
-# queries against the wrong database.
-module StagehandAssociationScope
-  def association_scope
-    current_db = if klass.connection.respond_to?(:connection_db_config)
-      klass.connection.connection_db_config.database
-    else
-      klass.connection.current_database
-    end
-
-    if defined?(@association_scope_db) && @association_scope_db == current_db && defined?(@association_scope) && @association_scope
-      return @association_scope
-    end
-
-    @association_scope_db = current_db
-    super
-  end
-end
-
-ActiveRecord::Associations::Association.prepend(StagehandAssociationScope)

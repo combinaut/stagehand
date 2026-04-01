@@ -5,16 +5,6 @@ module Stagehand
 
       included do
         Stagehand::Configuration.staging_model_tables << table_name if table_name
-
-        # For STI hierarchies, ensure the base class also carries the staging
-        # connection behavior so association lookups (which use the base class)
-        # stay on the staging database.
-        if respond_to?(:base_class)
-          base = base_class
-          if base && base != self && !(base < Stagehand::Staging::Model)
-            base.include(Stagehand::Staging::Model)
-          end
-        end
       end
 
       class_methods do
