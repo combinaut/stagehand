@@ -79,9 +79,7 @@ describe Stagehand::Staging::Model do
     end
 
     it 'can load an association of a staging model while on the production connection after calling that association on the staging connection' do
-      source = klass.create!
-      Stagehand::Production.save(source)
-      record = TargetAssignment.create!(:source_record => source)
+      record = TargetAssignment.create!(:source_record => klass.new)
       Stagehand::Database.with_staging_connection do
         record.association(:source_record).reload
       end

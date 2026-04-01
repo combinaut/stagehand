@@ -5,6 +5,16 @@ module Stagehand
 
       included do
         Stagehand::Configuration.staging_model_tables << table_name if table_name
+
+        # For STI hierarchies, ensure the base class also carries the staging
+        # connection behavior so association lookups (which use the base class)
+        # stay on the staging database.
+        if respond_to?(:base_class)
+          base = base_class
+          if base && base != self && !(base < Stagehand::Staging::Model)
+            base.include(Stagehand::Staging::Model)
+          end
+        end
       end
 
       class_methods do
@@ -26,10 +36,10 @@ module Stagehand
         def connection_pool
           if Configuration.ghost_mode? || Configuration.single_connection?
             super
-          elsif Stagehand::Database.connected_to_staging?
-            ActiveRecord::Base.connection_pool # Reuse existing pool so we stay within the current transaction
           else
-            Stagehand::Database::StagingProbe.connection_pool
+            ActiveRecord::Base.connected_to(shard: :staging, role: :writing) do
+              ActiveRecord::Base.connection_pool
+            end
           end
         end
 
@@ -42,7 +52,9 @@ module Stagehand
           if Configuration.ghost_mode? || Configuration.single_connection?
             super
           else
-            Stagehand::Database::StagingProbe.connection
+            ActiveRecord::Base.connected_to(shard: :staging, role: :writing) do
+              ActiveRecord::Base.connection
+            end
           end
         end
       end

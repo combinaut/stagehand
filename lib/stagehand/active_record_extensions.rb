@@ -53,9 +53,38 @@ module StagehandAssociationReflection
     end
 
     def __getobj__
-      Stagehand::Database.connected_to_production? ? @production_cache : @staging_cache
+      adapter_db = if ActiveRecord::Base.connection.respond_to?(:connection_db_config)
+        ActiveRecord::Base.connection.connection_db_config.database
+      else
+        ActiveRecord::Base.connection.current_database
+      end
+
+      adapter_db == Stagehand::Database.production_database_name ? @production_cache : @staging_cache
     end
   end
 end
 
 ActiveRecord::Reflection::AssociationReflection.prepend(StagehandAssociationReflection)
+
+# Recompute association scopes when the underlying connection database changes
+# (e.g., switching between staging and production shards). Without this, a scope
+# cached under staging can be reused after switching to production, leading to
+# queries against the wrong database.
+module StagehandAssociationScope
+  def association_scope
+    current_db = if klass.connection.respond_to?(:connection_db_config)
+      klass.connection.connection_db_config.database
+    else
+      klass.connection.current_database
+    end
+
+    if defined?(@association_scope_db) && @association_scope_db == current_db && defined?(@association_scope) && @association_scope
+      return @association_scope
+    end
+
+    @association_scope_db = current_db
+    super
+  end
+end
+
+ActiveRecord::Associations::Association.prepend(StagehandAssociationScope)
