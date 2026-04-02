@@ -1,3 +1,4 @@
+require 'stagehand/rails_compatibility'
 require 'stagehand/active_record_extensions'
 
 module Stagehand
@@ -94,12 +95,20 @@ module Stagehand
       database_name(Configuration.staging_connection_name)
     end
 
-    def staging_database_versions
-      ActiveRecord::SchemaMigration.new(StagingProbe.connection_pool).versions.sort
+    def production_database_versions
+      if Configuration.single_connection?
+        staging_database_versions
+      else
+        with_production_connection do
+          schema_versions_for_connection
+        end
+      end
     end
 
-    def production_database_versions
-      ActiveRecord::SchemaMigration.new(ProductionProbe.connection_pool).versions.sort
+    def staging_database_versions
+      with_staging_connection do
+        schema_versions_for_connection
+      end
     end
 
     def with_staging_connection(&block)
@@ -154,6 +163,15 @@ module Stagehand
 
     def database_configuration
       @database_configuration ||= Rails.configuration.database_configuration
+    end
+
+    def schema_versions_for_connection
+      connection = ActiveRecord::Base.connection
+      table_name = Stagehand::RailsCompatibility.schema_migration_table_name_for(connection)
+      table = connection.quote_table_name(table_name)
+      connection.select_values("SELECT version FROM #{table} ORDER BY version ASC").map(&:to_s)
+    rescue ActiveRecord::StatementInvalid
+      []
     end
 
     # CLASSES

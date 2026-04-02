@@ -1,4 +1,4 @@
-require 'stagehand/adapter_database'
+require 'stagehand/rails_compatibility'
 
 module Stagehand
   module Connection
@@ -35,7 +35,7 @@ module Stagehand
         # Prefix when we're on a production connection (per Stagehand stack) or
         # when the adapter itself is pointed at production. If both the stack
         # and adapter say staging, no prefix is needed.
-        adapter_db = Stagehand::AdapterDatabase.name_for(self)
+        adapter_db = Stagehand::RailsCompatibility.adapter_database_name_for(self)
 
         return false if adapter_db == Database.staging_database_name && !Database.connected_to_production?
 

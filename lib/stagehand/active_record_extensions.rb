@@ -1,4 +1,4 @@
-require 'stagehand/adapter_database'
+require 'stagehand/rails_compatibility'
 
 ActiveRecord::Base.class_eval do
   # SYNC CALLBACKS
@@ -61,7 +61,7 @@ module StagehandAssociationReflection
   private
 
   def stagehand_adapter_database(connection)
-    Stagehand::AdapterDatabase.name_for(connection)
+    Stagehand::RailsCompatibility.adapter_database_name_for(connection)
   end
 end
 
