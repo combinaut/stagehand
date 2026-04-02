@@ -22,6 +22,16 @@ Key features:
 
 Stagehand currently supports MySQL, but does not use any exotic commands and should work on other databases.
 
+### Rails Version Support
+
+As of April 2026, the appraisal and CI matrix targets Rails 7.0 through 8.1.
+
+Rails 5.2 and 6.x appraisals were dropped for these reasons:
+
+- Upstream support for those Rails lines has ended, so ongoing compatibility fixes are increasingly brittle.
+- Maintaining old Rails lines alongside Ruby 3.4/4.0 requires extra boot shims and test-only workarounds that do not benefit the gem's runtime behavior.
+- Focusing CI on actively supported Rails versions keeps the matrix reliable and maintenance effort manageable.
+
 ## Setup
 1. Add **Stagehand** to your Gemfile:
 

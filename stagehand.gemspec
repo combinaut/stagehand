@@ -16,7 +16,7 @@ Gem::Specification.new do |s|
 
   s.files = Dir["{app,config,db,lib}/**/*", "MIT-LICENSE", "Rakefile", "README.rdoc"]
 
-  s.add_dependency 'rails', '>= 5.2', '< 8.2'
+  s.add_dependency 'rails', '>= 7.0', '< 8.2'
   s.add_dependency 'mysql2'
   s.add_dependency 'ruby-graphviz'
 

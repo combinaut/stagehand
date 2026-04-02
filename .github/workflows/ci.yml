@@ -27,16 +27,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Rails 5.2
-          - ruby: "2.7"
-            gemfile: rails-5.2
-
-          # Rails 6.1
-          - ruby: "2.7"
-            gemfile: rails-6.1
-          - ruby: "3.2"
-            gemfile: rails-6.1
-
           # Rails 7.0
           - ruby: "3.2"
             gemfile: rails-7.0
