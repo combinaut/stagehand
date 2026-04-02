@@ -163,8 +163,10 @@ module Stagehand
 
       def self.build_missing_model(table_name)
         raise MissingTable, "Can't find table specified in entry: #{table_name}" unless Database.staging_connection.tables.include?(table_name)
+        class_name = table_name.classify
+        DummyClass.send(:remove_const, class_name) if DummyClass.const_defined?(class_name, false)
         klass = Class.new(ActiveRecord::Base) { self.table_name = table_name }
-        DummyClass.const_set(table_name.classify, klass)
+        DummyClass.const_set(class_name, klass)
       end
     end
   end

@@ -1,7 +1,6 @@
 development:
   adapter: mysql2
   encoding: utf8
-  reconnect: false
   database: <%= "stagehand_staging#{ENV.fetch('STAGEHAND_TEST_DATABASE_SUFFIX', '')}" %>
   username: <%= ENV.fetch('DB_USERNAME', 'root') %>
   password: <%= ENV.fetch('DB_PASSWORD', '') %>
@@ -11,7 +10,6 @@ development:
 test:
   adapter: mysql2
   encoding: utf8
-  reconnect: false
   database: <%= "stagehand_staging#{ENV.fetch('STAGEHAND_TEST_DATABASE_SUFFIX', '')}" %>
   username: <%= ENV.fetch('DB_USERNAME', 'root') %>
   password: <%= ENV.fetch('DB_PASSWORD', '') %>
@@ -21,7 +19,6 @@ test:
 production:
   adapter: mysql2
   encoding: utf8
-  reconnect: false
   database: <%= "stagehand_production#{ENV.fetch('STAGEHAND_TEST_DATABASE_SUFFIX', '')}" %>
   username: <%= ENV.fetch('DB_USERNAME', 'root') %>
   password: <%= ENV.fetch('DB_PASSWORD', '') %>
