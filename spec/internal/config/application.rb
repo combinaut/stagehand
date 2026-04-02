@@ -9,6 +9,7 @@ module Internal
   class Application < Rails::Application
     config.root = File.expand_path('../..', __FILE__)
     config.eager_load = false
+    config.active_record.dump_schema_after_migration = false
     config.x.stagehand.production_connection_name = :production
     if ActiveRecord.gem_version < Gem::Version.new('7.1') && config.active_record.respond_to?(:legacy_connection_handling=)
       config.active_record.legacy_connection_handling = false
