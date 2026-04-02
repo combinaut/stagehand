@@ -33,18 +33,18 @@ module Stagehand
         true
       end
 
-      def exec_insert(sql, *)
-        handle_readonly_writes!(sql)
+      def exec_insert(sql, *, **)
+        handle_readonly_writes!(sql.respond_to?(:to_sql) ? sql.to_sql : sql)
         super
       end
 
-      def exec_update(sql, *)
-        handle_readonly_writes!(sql)
+      def exec_update(sql, *, **)
+        handle_readonly_writes!(sql.respond_to?(:to_sql) ? sql.to_sql : sql)
         super
       end
 
-      def exec_delete(sql, *)
-        handle_readonly_writes!(sql)
+      def exec_delete(sql, *, **)
+        handle_readonly_writes!(sql.respond_to?(:to_sql) ? sql.to_sql : sql)
         super
       end
 

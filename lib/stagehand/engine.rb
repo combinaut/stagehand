@@ -22,5 +22,10 @@ module Stagehand
       require 'stagehand/schema'
       require 'stagehand/auditor'
     end
+
+    # Register shard connections after ActiveRecord is fully initialized
+    initializer 'stagehand.configure_shards', after: :load_config_initializers do
+      Stagehand::Database.configure_shards!
+    end
   end
 end

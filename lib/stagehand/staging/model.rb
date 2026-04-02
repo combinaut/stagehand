@@ -4,7 +4,7 @@ module Stagehand
       extend ActiveSupport::Concern
 
       included do
-        Stagehand::Configuration.staging_model_tables << table_name if table_name 
+        Stagehand::Configuration.staging_model_tables << table_name if table_name
       end
 
       class_methods do
@@ -23,8 +23,21 @@ module Stagehand
           end
         end
 
+        def connection_pool
+          if Configuration.ghost_mode? || Configuration.single_connection?
+            super
+          else
+            Stagehand::Database::StagingProbe.connection_pool
+          end
+        end
+
+        # Rails 8.1 soft-deprecated connection in favor of connection_pool,
+        # but the adapter instance returned by connection is still used for
+        # SQL execution. Without this override, writes from association proxies
+        # (e.g. has_many#delete_all) go through the production shard's adapter,
+        # triggering UnsyncedProductionWrite.
         def connection
-          if Configuration.ghost_mode?
+          if Configuration.ghost_mode? || Configuration.single_connection?
             super
           else
             Stagehand::Database::StagingProbe.connection

@@ -9,7 +9,7 @@ RSpec.configure do |config|
         ActiveRecord::Schema.define(version: 0) do
           ActiveRecord::Base.connection.tables.each {|table_name| drop_table(table_name) }
 
-          create_table :schema_migrations, :id => false do |t|
+          create_table :schema_migrations, :id => false, :if_not_exists => true do |t|
             t.string :version
           end
 
@@ -49,6 +49,7 @@ RSpec.configure do |config|
 
     Stagehand::Database.with_connection(Stagehand.configuration.staging_connection_name) do
       # Add stagehand to the staging database
+
       Stagehand::Schema.init_stagehand!
 
       # Add a table to the staging side that doesn't appear on the production side and doesn't have stagehand

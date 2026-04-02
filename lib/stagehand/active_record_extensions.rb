@@ -1,5 +1,3 @@
-require 'thread'
-
 ActiveRecord::Base.class_eval do
   # SYNC CALLBACKS
   ([self] + ActiveSupport::DescendantsTracker.descendants(self)).each do |klass|
@@ -37,58 +35,11 @@ ActiveRecord::Base.class_eval do
     @has_stagehand = Stagehand::Schema.has_stagehand?(table_name) unless defined?(@has_stagehand)
     return @has_stagehand
   end
-
-  # MULTITHREADED CONNECTION HANDLING
-
-  class_attribute :stagehand_threadsafe_connections
-  self.stagehand_threadsafe_connections = true
-
-  # The original implementation of remove_connection uses @connection_specification_name, which is shared across Threads.
-  # We need to pass in the connection that model in the current thread is using if we call remove_connection.
-  def self.remove_connection(name = StagehandConnectionMap.get(self))
-    return super unless stagehand_threadsafe_connections
-
-    StagehandConnectionMap.set(self, nil)
-    super
-  end
-
-  def self.connection_specification_name=(connection_name)
-    return super unless stagehand_threadsafe_connections
-
-    # ActiveRecord sets the connection pool to 'primary' by default, so we want to reuse that connection for staging
-    # in order to avoid using a different connection pool after our first swap back to the staging connection.
-    connection_name == 'primary' if connection_name == Stagehand::Configuration.staging_connection_name
-
-    StagehandConnectionMap.set(self, connection_name)
-  end
-
-  def self.connection_specification_name
-    return super unless stagehand_threadsafe_connections
-
-    StagehandConnectionMap.get(self) || super
-  end
-
-  # Keep track of the current connection name per-model, per-thread so multithreaded webservers don't overwrite it
-  module StagehandConnectionMap
-    def self.set(klass, connection_name)
-      current_map[klass.name] = connection_name
-    end
-
-    def self.get(klass)
-      current_map[klass.name]
-    end
-
-    def self.current_map
-      map = Thread.current.thread_variable_get('StagehandConnectionMap')
-      map = Thread.current.thread_variable_set('StagehandConnectionMap', Concurrent::Hash.new) unless map
-      return map
-    end
-  end
 end
 
 module StagehandAssociationReflection
   # SOURCE: https://github.com/rails/rails/blob/a4581b53aae93a8dd3205abae0630398cbce9204/activerecord/lib/active_record/reflection.rb#L429
-  def initialize(*)
+  def initialize(*, **)
     super
     @association_scope_cache = StagehandAssociationScopeCache.new
   end

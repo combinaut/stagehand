@@ -16,7 +16,7 @@ ENGINE_RAILS_ROOT = File.join(File.dirname(__FILE__), '../')
 Dir[File.join(ENGINE_RAILS_ROOT, "spec/support/**/*.rb")].each {|f| require f }
 
 RSpec.configure do |config|
-  config.fixture_path = "#{::Rails.root}/spec/fixtures"
+  config.fixture_paths = ["#{::Rails.root}/spec/fixtures"]
 
   config.append_after(:each) do
     DatabaseCleaner.strategy = :deletion
