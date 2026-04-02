@@ -44,15 +44,17 @@ module Stagehand
 
         Rails.logger.info "Syncing"
 
-        iterate_autosyncable_entries do |entry|
-          sync_entry(entry, :callbacks => :sync, **opts)
-          synced_count += 1
+        Database.with_staging_connection do
+          iterate_autosyncable_entries do |entry|
+            sync_entry(entry, :callbacks => :sync, **opts)
+            synced_count += 1
 
-          scope = CommitEntry.matching(entry).not_in_progress
-          scope = scope.save_operations unless entry.delete_operation?
-          deleted_count += delete_without_range_locks(scope)
+            scope = CommitEntry.matching(entry).not_in_progress
+            scope = scope.save_operations unless entry.delete_operation?
+            deleted_count += delete_without_range_locks(scope)
 
-          break if synced_count == limit
+            :stop if synced_count == limit
+          end
         end
 
         Rails.logger.info "Synced #{synced_count} entries"
@@ -102,7 +104,8 @@ module Stagehand
         current = CommitEntry.maximum(:id).to_i
 
         while entries = autosyncable_entries("id <= #{current}").limit(BATCH_SIZE).order(ENTRY_SYNC_ORDER_SQL).to_a.presence do
-          with_confirmed_autosyncability(entries.uniq(&:key), &block)
+          stop_requested = with_confirmed_autosyncability(entries.uniq(&:key), &block)
+          break if stop_requested
           current = entries.last.try(:id).to_i - 1
         end
       end
@@ -113,7 +116,9 @@ module Stagehand
       # is acquired and then the record's autosync eligibility is rechecked before calling the block.
       def with_confirmed_autosyncability(entries, &block)
         entries = Array.wrap(entries)
-        return unless entries.present?
+        return false unless entries.present?
+
+        stop_requested = false
 
         Database.transaction do
           # Lock the records so nothing can update them after we confirm autosyncability
@@ -123,9 +128,16 @@ module Stagehand
           confirmed_ids = Set.new(autosyncable_entries.where(:id => entries).pluck(:id))
 
           entries.each do |entry|
-            block.call(entry) if confirmed_ids.include?(entry.id)
+            next unless confirmed_ids.include?(entry.id)
+
+            if block.call(entry) == :stop
+              stop_requested = true
+              break
+            end
           end
         end
+
+        stop_requested
       end
 
       # Does not actually acquire a lock, instead it triggers a 'first read' so the transaction will ensure subsequent
