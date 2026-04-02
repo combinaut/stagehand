@@ -68,13 +68,13 @@ describe Stagehand::Production do
       end
 
       it 'makes an exact copy of the attributes' do
-        source_record.update_attributes(:name => 'test')
+        source_record.update(:name => 'test')
         source_record.reload # reload ensures timestamps are only as accurate as the database can store
         expect(subject.save(source_record).attributes).to eq(source_record.attributes)
       end
 
       it 'makes an exact copy of JSON attributes' do
-        source_record.update_attributes(:json => { should_not: "be stored as a JSON string" })
+        source_record.update(:json => { should_not: "be stored as a JSON string" })
         source_record.reload # reload ensures timestamps are only as accurate as the database can store
         expect(subject.save(source_record).attributes).to eq(source_record.attributes)
       end
@@ -84,12 +84,12 @@ describe Stagehand::Production do
       end
 
       it 'does set timestamps' do
-        source_record.update_attributes(:created_at => nil, :updated_at => nil)
+        source_record.update(:created_at => nil, :updated_at => nil)
         expect(subject.save(source_record)).to have_attributes(:created_at => nil, :updated_at => nil)
       end
 
       it 'does not change timestamps' do
-        source_record.update_attributes(:created_at => 1.day.ago, :updated_at => 0.5.days.ago)
+        source_record.update(:created_at => 1.day.ago, :updated_at => 0.5.days.ago)
         expect(subject.save(source_record)).to have_attributes(source_record.attributes.slice(:created_at, :updated_at))
       end
 
@@ -105,7 +105,7 @@ describe Stagehand::Production do
 
       it 'does not copy ignored columns' do
         allow(Stagehand::Configuration).to receive(:ignored_columns).and_return(source_record.class.table_name => 'name')
-        source_record.update_attributes(:name => 'fail')
+        source_record.update(:name => 'fail')
         expect(subject.save(source_record)).not_to have_attributes(:name => 'fail')
       end
     end
@@ -146,7 +146,7 @@ describe Stagehand::Production do
 
     describe '::save' do
       it 'can update the existing record' do
-        source_record.update_attributes(:name => 'changed')
+        source_record.update(:name => 'changed')
         expect { subject.save(source_record) }.to change { live_record.reload.name }.to('changed')
       end
     end
