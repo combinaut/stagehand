@@ -29,33 +29,33 @@ jobs:
         include:
           # Rails 7.0
           - ruby: "3.2"
-            gemfile: rails-7.0
+            gemfile: rails_7.0
           - ruby: "3.3"
-            gemfile: rails-7.0
+            gemfile: rails_7.0
 
           # Rails 7.1
           - ruby: "3.2"
-            gemfile: rails-7.1
+            gemfile: rails_7.1
           - ruby: "3.3"
-            gemfile: rails-7.1
+            gemfile: rails_7.1
 
           # Rails 7.2
           - ruby: "3.3"
-            gemfile: rails-7.2
+            gemfile: rails_7.2
           - ruby: "3.4"
-            gemfile: rails-7.2
+            gemfile: rails_7.2
 
           # Rails 8.0
           - ruby: "3.3"
-            gemfile: rails-8.0
+            gemfile: rails_8.0
           - ruby: "3.4"
-            gemfile: rails-8.0
+            gemfile: rails_8.0
 
           # Rails 8.1
           - ruby: "3.4"
-            gemfile: rails-8.1
+            gemfile: rails_8.1
           - ruby: "4.0"
-            gemfile: rails-8.1
+            gemfile: rails_8.1
 
     name: Ruby ${{ matrix.ruby }} / Rails ${{ matrix.gemfile }}
 
