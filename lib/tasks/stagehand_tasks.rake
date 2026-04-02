@@ -22,8 +22,20 @@ namespace :stagehand do
       Stagehand::Database.each do |connection_name|
         Stagehand::Connection.with_production_writes do
           puts "#{connection_name}"
-          Rake::Task[task].reenable
-          Rake::Task[task].invoke
+
+          if task == 'db:create'
+            # db:create resolves configurations from environment names; explicitly
+            # create the target connection's database so production isn't skipped.
+            ActiveRecord::Tasks::DatabaseTasks.create(connection_name)
+          else
+            # Some Rails versions evaluate migration tasks against ActiveRecord::Base's
+            # primary pool regardless of connected_to context.
+            ActiveRecord::Base.establish_connection(connection_name)
+            Rake::Task[task].reenable
+            # Execute task actions directly to avoid re-triggering prerequisites
+            # and invocation state while we fan out across both connections.
+            Rake::Task[task].execute
+          end
         end
       end
       Rake::Task[task].clear
