@@ -1,3 +1,5 @@
+require 'stagehand/adapter_database'
+
 ActiveRecord::Base.class_eval do
   # SYNC CALLBACKS
   ([self] + ActiveSupport::DescendantsTracker.descendants(self)).each do |klass|
@@ -59,11 +61,7 @@ module StagehandAssociationReflection
   private
 
   def stagehand_adapter_database(connection)
-    if connection.respond_to?(:connection_db_config)
-      connection.connection_db_config.database
-    else
-      connection.current_database
-    end
+    Stagehand::AdapterDatabase.name_for(connection)
   end
 end
 

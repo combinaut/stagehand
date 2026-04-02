@@ -1,3 +1,5 @@
+require 'stagehand/adapter_database'
+
 module Stagehand
   module Connection
     def self.with_production_writes(&block)
@@ -30,11 +32,11 @@ module Stagehand
         return false if Connection.allow_unsynced_production_writes?
         return false unless Configuration.staging_model_tables.include?(table_name)
 
-        adapter_db = respond_to?(:connection_db_config) ? connection_db_config.database : @config[:database]
-
         # Prefix when we're on a production connection (per Stagehand stack) or
         # when the adapter itself is pointed at production. If both the stack
         # and adapter say staging, no prefix is needed.
+        adapter_db = Stagehand::AdapterDatabase.name_for(self)
+
         return false if adapter_db == Database.staging_database_name && !Database.connected_to_production?
 
         true
