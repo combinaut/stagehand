@@ -9,7 +9,6 @@ gem "rspec-rails", "~> 6.0"
 
 group :development do
   gem "pry"
-  gem "pry-byebug"
 end
 
 gemspec path: "../"

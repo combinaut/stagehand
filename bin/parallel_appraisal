@@ -1,0 +1,180 @@
+#!/usr/bin/env ruby
+
+require 'etc'
+require 'optparse'
+require 'shellwords'
+require 'tmpdir'
+
+$stdout.sync = true
+
+options = {
+  appraisals: ENV.fetch('APPRAISALS', '').split(/[\s,]+/).map(&:strip).reject(&:empty?),
+  command: ENV['APPRAISAL_COMMAND'].to_s.strip,
+  jobs: ENV['JOBS'],
+  retries: ENV.fetch('APPRAISAL_RETRIES', '0'),
+  bundle_without: ENV.fetch('APPRAISAL_BUNDLE_WITHOUT', ''),
+  install_missing: ENV.fetch('APPRAISAL_INSTALL_MISSING', '1') != '0',
+  strict_dependency_checks: ENV.fetch('APPRAISAL_STRICT_DEPENDENCY_CHECKS', '0') == '1',
+  dry_run: false
+}
+
+OptionParser.new do |parser|
+  parser.banner = 'Usage: bin/parallel_appraisal [options] [-- command]'
+
+  parser.on('--appraisals x,y,z', Array, 'Comma-separated appraisal names to run') do |appraisals|
+    options[:appraisals] = appraisals
+  end
+
+  parser.on('--command COMMAND', 'Command to run for each appraisal') do |command|
+    options[:command] = command
+  end
+
+  parser.on('--jobs N', Integer, 'Number of appraisals to run concurrently') do |jobs|
+    options[:jobs] = jobs
+  end
+
+  parser.on('--retries N', Integer, 'Number of retries for failed appraisals') do |retries|
+    options[:retries] = retries
+  end
+
+  parser.on('--without GROUPS', 'Bundler groups to exclude for appraisals') do |without_groups|
+    options[:bundle_without] = without_groups
+  end
+
+  parser.on('--[no-]install-missing', 'Install missing gems for each appraisal before running') do |install_missing|
+    options[:install_missing] = install_missing
+  end
+
+  parser.on('--[no-]strict-dependency-checks', 'Skip appraisals that fail dependency setup (default: warn and continue)') do |strict|
+    options[:strict_dependency_checks] = strict
+  end
+
+  parser.on('--dry-run', 'Print appraisal commands without executing them') do
+    options[:dry_run] = true
+  end
+end.parse!
+
+options[:command] = Shellwords.join(ARGV) if ARGV.any?
+options[:command] = 'rake db:create spec' if options[:command].to_s.empty?
+
+jobs = options[:jobs].to_i
+jobs = Etc.nprocessors if jobs < 1
+
+appraisals = if options[:appraisals].any?
+  options[:appraisals]
+else
+  File.foreach(File.expand_path('../Appraisals', __dir__)).filter_map do |line|
+    line[/^\s*appraise\s+["']([^"']+)["']/, 1]
+  end
+end
+
+abort 'No appraisals found to run.' if appraisals.empty?
+
+process_environment = begin
+  require 'bundler'
+  Bundler.unbundled_env
+rescue LoadError
+  ENV.to_h
+end
+
+if options[:bundle_without].to_s.strip != ''
+  existing_without = process_environment['BUNDLE_WITHOUT'].to_s
+  merged_without = [existing_without, options[:bundle_without]].reject(&:empty?).join(':')
+  process_environment = process_environment.merge('BUNDLE_WITHOUT' => merged_without)
+end
+
+def ensure_appraisal_dependencies(appraisal_name, process_environment)
+  check_command = ['bundle', 'exec', 'appraisal', appraisal_name, 'bundle', 'check']
+  return true if system(process_environment, *check_command, chdir: Dir.pwd, out: File::NULL, err: File::NULL)
+
+  puts "Installing missing gems for #{appraisal_name}..."
+  install_command = ['bundle', 'exec', 'appraisal', appraisal_name, 'bundle', 'install']
+  log_name = appraisal_name.gsub(/[^a-zA-Z0-9]+/, '_').downcase
+  log_path = File.join(Dir.tmpdir, "parallel_appraisal_#{log_name}_bundle_install.log")
+
+  install_success = File.open(log_path, 'w') do |log_file|
+    system(process_environment, *install_command, chdir: Dir.pwd, out: log_file, err: log_file)
+  end
+
+  return true if install_success
+
+  puts "Dependency install failed for #{appraisal_name}. See #{log_path}"
+  false
+end
+
+commands = appraisals.map do |appraisal_name|
+  suffix = "_#{appraisal_name.gsub(/[^a-zA-Z0-9]+/, '_').gsub(/\A_+|_+\z/, '').downcase}"
+  command = ['bundle', 'exec', 'appraisal', appraisal_name, *Shellwords.split(options[:command])]
+  {
+    appraisal_name: appraisal_name,
+    suffix: suffix,
+    command: command,
+    attempts: 0
+  }
+end
+
+if options[:dry_run]
+  commands.each do |entry|
+    suffix = entry[:suffix]
+    command = entry[:command]
+    rendered = Shellwords.join(['STAGEHAND_TEST_DATABASE_SUFFIX=' + suffix, *command])
+    puts rendered
+  end
+  exit 0
+end
+
+if options[:install_missing]
+  dependency_setup_failures = []
+
+  appraisals.each do |appraisal_name|
+    next if ensure_appraisal_dependencies(appraisal_name, process_environment)
+
+    dependency_setup_failures << appraisal_name
+  end
+
+  if dependency_setup_failures.any?
+    if options[:strict_dependency_checks]
+      puts "Skipping appraisals with dependency setup failures: #{dependency_setup_failures.join(', ')}"
+      commands.reject! { |entry| dependency_setup_failures.include?(entry[:appraisal_name]) }
+    else
+      puts "Dependency setup failed for: #{dependency_setup_failures.join(', ')}"
+      puts 'Continuing anyway. Use --strict-dependency-checks to skip these appraisals.'
+    end
+  end
+end
+
+abort 'No runnable appraisals after dependency checks.' if commands.empty?
+
+running_appraisals = {}
+failures = []
+max_retries = [options[:retries].to_i, 0].max
+
+while commands.any? || running_appraisals.any?
+  while running_appraisals.size < jobs && commands.any?
+    entry = commands.shift
+    appraisal_name = entry[:appraisal_name]
+    suffix = entry[:suffix]
+    command = entry[:command]
+
+    puts "Starting #{appraisal_name} (attempt #{entry[:attempts] + 1}): #{options[:command]}"
+    command_environment = process_environment.merge('STAGEHAND_TEST_DATABASE_SUFFIX' => suffix)
+    pid = Process.spawn(command_environment, *command, chdir: Dir.pwd)
+    running_appraisals[pid] = entry
+  end
+
+  pid, status = Process.wait2
+  entry = running_appraisals.delete(pid)
+  appraisal_name = entry[:appraisal_name]
+  next if status.success?
+
+  if entry[:attempts] < max_retries
+    entry[:attempts] += 1
+    puts "Retrying #{appraisal_name} after failure (exit #{status.exitstatus})..."
+    commands << entry
+    next
+  end
+
+  failures << "#{appraisal_name} (exit #{status.exitstatus})"
+end
+
+abort "Parallel appraisal run failed: #{failures.join(', ')}" unless failures.empty?

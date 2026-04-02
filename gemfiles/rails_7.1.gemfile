@@ -10,7 +10,6 @@ gem "ostruct"
 
 group :development do
   gem "pry"
-  gem "pry-byebug"
 end
 
 gemspec path: "../"

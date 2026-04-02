@@ -6,7 +6,6 @@ module Stagehand
 
       BATCH_SIZE = 1000
       ENTRY_SYNC_ORDER = [:delete, :update, :insert].freeze
-      ENTRY_SYNC_ORDER_SQL = Arel.sql(ActiveRecord::Base.send(:sanitize_sql_for_order, [Arel.sql('FIELD(operation, ?), id ASC'), ENTRY_SYNC_ORDER])).freeze
 
       # Immediately sync the changes from the block, preconfirming all changes
       # The block is wrapped in a transaction to prevent changes to records while being synced
@@ -65,7 +64,7 @@ module Stagehand
 
       def sync_all(**opts)
         loop do
-          entries = CommitEntry.order(ENTRY_SYNC_ORDER_SQL).limit(BATCH_SIZE).to_a
+          entries = CommitEntry.order(entry_sync_order_sql).limit(BATCH_SIZE).to_a
           break unless entries.present?
 
           latest_entries = entries.uniq(&:key)
@@ -103,7 +102,7 @@ module Stagehand
       def iterate_autosyncable_entries(&block)
         current = CommitEntry.maximum(:id).to_i
 
-        while entries = autosyncable_entries("id <= #{current}").limit(BATCH_SIZE).order(ENTRY_SYNC_ORDER_SQL).to_a.presence do
+        while entries = autosyncable_entries("id <= #{current}").limit(BATCH_SIZE).order(entry_sync_order_sql).to_a.presence do
           stop_requested = with_confirmed_autosyncability(entries.uniq(&:key), &block)
           break if stop_requested
           current = entries.last.try(:id).to_i - 1
@@ -173,6 +172,10 @@ module Stagehand
 
           Rails.logger.info "Synchronized #{entry.table_name} #{entry.record_id} (#{entry.operation})"
         end
+      end
+
+      def entry_sync_order_sql
+        @entry_sync_order_sql ||= Arel.sql(ActiveRecord::Base.send(:sanitize_sql_for_order, [Arel.sql('FIELD(operation, ?), id ASC'), ENTRY_SYNC_ORDER])).freeze
       end
 
       def schemas_match?

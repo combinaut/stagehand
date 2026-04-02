@@ -75,10 +75,5 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
 
-      - name: Create databases
-        run: |
-          mysql -u root -h 127.0.0.1 -e "CREATE DATABASE IF NOT EXISTS stagehand_staging;"
-          mysql -u root -h 127.0.0.1 -e "CREATE DATABASE IF NOT EXISTS stagehand_production;"
-
       - name: Run tests
-        run: bundle exec rake spec
+        run: bundle exec rake db:create spec

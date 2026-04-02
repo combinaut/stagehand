@@ -3,7 +3,7 @@ PATH
   specs:
     combinaut_stagehand (1.2.3)
       mysql2
-      rails (>= 5.2, < 8.2)
+      rails (>= 7.0, < 8.2)
       ruby-graphviz
 
 GEM
@@ -248,9 +248,6 @@ DEPENDENCIES
   benchmark
   combinaut_stagehand!
   database_cleaner
-  drb
-  logger
-  mutex_m
   ostruct
   pry
   pry-byebug

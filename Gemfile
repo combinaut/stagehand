@@ -18,5 +18,4 @@ gem 'benchmark'
 
 group :development do
 	gem 'pry'
-	gem 'pry-byebug'
 end

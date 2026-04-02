@@ -629,3 +629,27 @@ are being used.
 
 - Unsynced write detection relies on the `exec_insert`, `exec_update`, `exec_delete` methods from
 ActiveRecord::AbstractAdapter. It will not detect writes using the `execute` method.
+
+
+## Development and Testing
+
+Appraisal runs can isolate their test databases automatically. The internal test app supports an optional
+`STAGEHAND_TEST_DATABASE_SUFFIX`, and the parallel runner assigns a unique suffix per appraisal so concurrent runs use
+separate staging and production schemas.
+
+To run the appraisal matrix in parallel locally:
+
+```bash
+ruby bin/parallel_appraisal
+```
+
+The default command for each appraisal is `rake db:create spec`, which creates both Stagehand databases before running
+the suite. You can override the concurrency, appraisals, or command as needed:
+
+```bash
+ruby bin/parallel_appraisal --jobs 3 --appraisals rails-7.2,rails-8.1
+ruby bin/parallel_appraisal --command 'rspec spec/lib/staging/model_spec.rb'
+ruby bin/parallel_appraisal -- rspec spec/lib/staging/model_spec.rb
+```
+
+Environment variables (`JOBS`, `APPRAISALS`, `APPRAISAL_COMMAND`) are also supported as fallbacks.
