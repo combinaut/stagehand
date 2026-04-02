@@ -1,4 +1,5 @@
 require 'stagehand/rails_compatibility'
+require 'stagehand/adapter_extender'
 
 module Stagehand
   module Connection
@@ -81,4 +82,4 @@ module Stagehand
   class UnsyncedProductionWrite < StandardError; end
 end
 
-ActiveRecord::Base.connection.class.prepend(Stagehand::Connection::AdapterExtensions)
+Stagehand::AdapterExtender.prepend_on_active_record_load(Stagehand::Connection::AdapterExtensions)

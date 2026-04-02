@@ -1,3 +1,5 @@
+require 'stagehand/adapter_extender'
+
 module Stagehand
   module Schema
     module Statements
@@ -48,5 +50,8 @@ module Stagehand
   end
 end
 
-ActiveRecord::Base.connection.class.include Stagehand::Schema::Statements
-ActiveRecord::SchemaDumper.prepend Stagehand::Schema::DumperExtensions
+Stagehand::AdapterExtender.prepend_on_active_record_load(Stagehand::Schema::Statements)
+
+ActiveSupport.on_load(:active_record) do
+  ActiveRecord::SchemaDumper.prepend Stagehand::Schema::DumperExtensions unless ActiveRecord::SchemaDumper < Stagehand::Schema::DumperExtensions
+end
