@@ -17,5 +17,5 @@ gem 'benchmark'
 # gem 'byebug', group: [:development, :test]
 
 group :development do
-	gem 'pry'
+  gem 'pry'
 end
