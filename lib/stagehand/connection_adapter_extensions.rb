@@ -61,17 +61,23 @@ module Stagehand
       private
 
       def write_access?
-        Configuration.single_connection? || @config[:database] == Database.staging_database_name || Connection.allow_unsynced_production_writes?
+        Configuration.single_connection? || adapter_database_name == Database.staging_database_name || Connection.allow_unsynced_production_writes?
       end
 
       def handle_readonly_writes!(sql)
+        database_name = adapter_database_name
+
         if write_access?
           return
         elsif Configuration.allow_unsynced_production_writes?
-          Rails.logger.warn "Writing directly to #{@config[:database]} database using readonly connection"
+          Rails.logger.warn "Writing directly to #{database_name} database using readonly connection"
         else
-          raise(UnsyncedProductionWrite, "Attempted to write directly to #{@config[:database]} database using readonly connection: #{sql}")
+          raise(UnsyncedProductionWrite, "Attempted to write directly to #{database_name} database using readonly connection: #{sql}")
         end
+      end
+
+      def adapter_database_name
+        Stagehand::RailsCompatibility.adapter_database_name_for(self)
       end
     end
   end
