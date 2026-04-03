@@ -25,6 +25,7 @@ Stagehand currently supports MySQL, but does not use any exotic commands and sho
 ### Rails Version Support
 
 As of April 2026, the appraisal and CI matrix targets Rails 7.0 through 8.1.
+The appraisal and CI matrix currently runs on Ruby 3.2, 3.3, 3.4, and 4.0.
 
 Rails 5.2 and 6.x appraisals were dropped for these reasons:
 
@@ -600,6 +601,13 @@ the triggers for each stagehand table.
 tables = ActiveRecord::Base.connection.tables.select {|table_name| Stagehand::Schema.has_stagehand?(table_name) }
 Stagehand::Schema.add_stagehand!(only: tables, force: true)
 ```
+
+## Upgrading from 1.2.3 to 2.0.0
+
+Stagehand 2.0.0 drops support for Rails 4.x and 5.x. The supported Rails range is now 7.0 through 8.1.
+Rails 6.x remains unsupported (support for 6.x was removed in the 1.x line).
+
+If your app still sets `config.active_record.legacy_connection_handling`, set it to `false` during upgrade steps where that option exists.
 
 ## Possible Caveats to double check when development is complete
 - A transaction is opened on the staging and production databases when syncing. This reduces the timing window where the
