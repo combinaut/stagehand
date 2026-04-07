@@ -44,6 +44,60 @@ describe Stagehand::Database do
     end
   end
 
+  describe '::allow_unsynced_production_writes' do
+    it 'can read uncommitted staging writes inside with_production_writes in the same transaction' do
+      subject.with_staging_connection do
+        ActiveRecord::Base.transaction do
+          record = SourceRecord.create!
+
+          Stagehand::Connection.with_production_writes do
+            expect(SourceRecord.where(:id => record.id).exists?).to be(true)
+          end
+        end
+      end
+    end
+
+    it 'writes to the production database within an open production transaction' do
+      expect do
+        subject.with_production_connection do
+          ActiveRecord::Base.transaction do
+            Stagehand::Connection.with_production_writes do
+              SourceRecord.create!
+            end
+          end
+        end
+      end.to change { subject.production_connection.select_values(SourceRecord.all).count }.by(1)
+    end
+
+    it 'restores write protection after with_production_writes ends' do
+      expect do
+        subject.with_production_connection do
+          ActiveRecord::Base.transaction do
+            Stagehand::Connection.with_production_writes do
+              SourceRecord.create!
+            end
+
+            SourceRecord.create!
+          end
+        end
+      end.to raise_exception(Stagehand::UnsyncedProductionWrite)
+    end
+
+    it 'does not commit writes performed under with_production_writes when the outer transaction rolls back' do
+      expect do
+        subject.with_production_connection do
+          ActiveRecord::Base.transaction do
+            Stagehand::Connection.with_production_writes do
+              SourceRecord.create!
+            end
+
+            raise ActiveRecord::Rollback
+          end
+        end
+      end.not_to change { subject.production_connection.select_values(SourceRecord.all).count }
+    end
+  end
+
   describe '::staging_connection' do
     without_transactional_fixtures
     use_then_clear_connection_for_class(SourceRecord, Stagehand.configuration.staging_connection_name)
