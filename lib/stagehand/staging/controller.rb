@@ -9,8 +9,8 @@ module Stagehand
       end
 
       # Creates a stagehand commit to log database changes associated with the given record
-      def stage_changes(*args, &block)
-        Staging::Commit.capture(*args, &block)
+      def stage_changes(*args, **kwargs, &block)
+        Staging::Commit.capture(*args, **kwargs, &block)
       end
 
       # Syncs the given record and all affected records to the production database

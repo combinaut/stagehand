@@ -1,3 +1,5 @@
+require 'stagehand/rake_helpers'
+
 namespace :stagehand do
   desc "Polls the commit entries table for changes to sync to production"
   task :auto_sync, [:delay] => :environment do |t, args|
@@ -16,28 +18,10 @@ namespace :stagehand do
     Stagehand::Staging::Synchronizer.sync_all
   end
 
-  # Enhance the regular tasks to run on both staging and production databases
-  def rake_both_databases(task, stagehand_task = task.gsub(':','_'))
-    task(stagehand_task => :environment) do
-      Stagehand::Database.each do |connection_name|
-        Stagehand::Connection.with_production_writes do
-          puts "#{connection_name}"
-          Rake::Task[task].reenable
-          Rake::Task[task].invoke
-        end
-      end
-      Rake::Task[task].clear
-    end
-
-    # Enhance the original task to run the stagehand_task as a prerequisite
-    Rake::Task[task].enhance(["stagehand:#{stagehand_task}"])
-  end
-
-  rake_both_databases('db:create')
-  rake_both_databases('db:migrate')
-  rake_both_databases('db:migrate:up')
-  rake_both_databases('db:migrate:down')
-  rake_both_databases('db:rollback')
-  rake_both_databases('db:test:load_structure')
-  rake_both_databases('db:test:load_schema')
+  Stagehand::RakeHelpers.rake_both_databases('db:create')
+  Stagehand::RakeHelpers.rake_both_databases('db:migrate')
+  Stagehand::RakeHelpers.rake_both_databases('db:migrate:up')
+  Stagehand::RakeHelpers.rake_both_databases('db:migrate:down')
+  Stagehand::RakeHelpers.rake_both_databases('db:rollback')
+  Stagehand::RakeHelpers.rake_both_databases('db:test:load_schema')
 end

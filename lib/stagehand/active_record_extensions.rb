@@ -1,4 +1,4 @@
-require 'thread'
+require 'stagehand/rails_compatibility'
 
 ActiveRecord::Base.class_eval do
   # SYNC CALLBACKS
@@ -37,73 +37,31 @@ ActiveRecord::Base.class_eval do
     @has_stagehand = Stagehand::Schema.has_stagehand?(table_name) unless defined?(@has_stagehand)
     return @has_stagehand
   end
-
-  # MULTITHREADED CONNECTION HANDLING
-
-  class_attribute :stagehand_threadsafe_connections
-  self.stagehand_threadsafe_connections = true
-
-  # The original implementation of remove_connection uses @connection_specification_name, which is shared across Threads.
-  # We need to pass in the connection that model in the current thread is using if we call remove_connection.
-  def self.remove_connection(name = StagehandConnectionMap.get(self))
-    return super unless stagehand_threadsafe_connections
-
-    StagehandConnectionMap.set(self, nil)
-    super
-  end
-
-  def self.connection_specification_name=(connection_name)
-    return super unless stagehand_threadsafe_connections
-
-    # ActiveRecord sets the connection pool to 'primary' by default, so we want to reuse that connection for staging
-    # in order to avoid using a different connection pool after our first swap back to the staging connection.
-    connection_name == 'primary' if connection_name == Stagehand::Configuration.staging_connection_name
-
-    StagehandConnectionMap.set(self, connection_name)
-  end
-
-  def self.connection_specification_name
-    return super unless stagehand_threadsafe_connections
-
-    StagehandConnectionMap.get(self) || super
-  end
-
-  # Keep track of the current connection name per-model, per-thread so multithreaded webservers don't overwrite it
-  module StagehandConnectionMap
-    def self.set(klass, connection_name)
-      current_map[klass.name] = connection_name
-    end
-
-    def self.get(klass)
-      current_map[klass.name]
-    end
-
-    def self.current_map
-      map = Thread.current.thread_variable_get('StagehandConnectionMap')
-      map = Thread.current.thread_variable_set('StagehandConnectionMap', Concurrent::Hash.new) unless map
-      return map
-    end
-  end
 end
 
 module StagehandAssociationReflection
-  # SOURCE: https://github.com/rails/rails/blob/a4581b53aae93a8dd3205abae0630398cbce9204/activerecord/lib/active_record/reflection.rb#L429
-  def initialize(*)
-    super
-    @association_scope_cache = StagehandAssociationScopeCache.new
+  # Rails 6.1+ caches association statements via AssociationReflection#association_scope_cache.
+  # Include Stagehand connection context in the key so scopes built in staging
+  # are not reused in production.
+  def association_scope_cache(klass, owner, &block)
+    key = self
+    key = [key, owner._read_attribute(@foreign_type)] if polymorphic?
+
+    if klass.method(:cached_find_by_statement).arity >= 2
+      klass.with_connection do |connection|
+        context_key = [key, stagehand_adapter_database(connection), Stagehand::Database.connected_to_production?]
+        klass.cached_find_by_statement(connection, context_key, &block)
+      end
+    else
+      context_key = [key, stagehand_adapter_database(klass.connection), Stagehand::Database.connected_to_production?]
+      klass.cached_find_by_statement(context_key, &block)
+    end
   end
 
-  # Ensure the association query statements are cached separately for the staging and production connections or else
-  # queries for Staging Models may cache the database name for the wrong connection.
-  class StagehandAssociationScopeCache < Delegator
-    def initialize
-      @staging_cache = Concurrent::Map.new
-      @production_cache = Concurrent::Map.new
-    end
+  private
 
-    def __getobj__
-      Stagehand::Database.connected_to_production? ? @production_cache : @staging_cache
-    end
+  def stagehand_adapter_database(connection)
+    Stagehand::RailsCompatibility.adapter_database_name_for(connection)
   end
 end
 

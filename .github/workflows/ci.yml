@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Rails 7.0
+          - ruby: "3.2"
+            gemfile: rails_7.0
+          - ruby: "3.3"
+            gemfile: rails_7.0
+
+          # Rails 7.1
+          - ruby: "3.2"
+            gemfile: rails_7.1
+          - ruby: "3.3"
+            gemfile: rails_7.1
+
+          # Rails 7.2
+          - ruby: "3.3"
+            gemfile: rails_7.2
+          - ruby: "3.4"
+            gemfile: rails_7.2
+
+          # Rails 8.0
+          - ruby: "3.3"
+            gemfile: rails_8.0
+          - ruby: "3.4"
+            gemfile: rails_8.0
+
+          # Rails 8.1
+          - ruby: "3.4"
+            gemfile: rails_8.1
+          - ruby: "4.0"
+            gemfile: rails_8.1
+
+    name: Ruby ${{ matrix.ruby }} / Rails ${{ matrix.gemfile }}
+
+    env:
+      BUNDLE_GEMFILE: gemfiles/${{ matrix.gemfile }}.gemfile
+      DB_USERNAME: root
+      DB_PASSWORD: ""
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Ruby ${{ matrix.ruby }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+
+      - name: Run tests
+        run: bundle exec rake db:create spec

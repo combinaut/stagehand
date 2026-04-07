@@ -22,6 +22,17 @@ Key features:
 
 Stagehand currently supports MySQL, but does not use any exotic commands and should work on other databases.
 
+### Rails Version Support
+
+As of April 2026, the appraisal and CI matrix targets Rails 7.0 through 8.1.
+The appraisal and CI matrix currently runs on Ruby 3.2, 3.3, 3.4, and 4.0.
+
+Rails 5.2 and 6.x appraisals were dropped for these reasons:
+
+- Upstream support for those Rails lines has ended, so ongoing compatibility fixes are increasingly brittle.
+- Maintaining old Rails lines alongside Ruby 3.4/4.0 requires extra boot shims and test-only workarounds that do not benefit the gem's runtime behavior.
+- Focusing CI on actively supported Rails versions keeps the matrix reliable and maintenance effort manageable.
+
 ## Setup
 1. Add **Stagehand** to your Gemfile:
 
@@ -591,6 +602,13 @@ tables = ActiveRecord::Base.connection.tables.select {|table_name| Stagehand::Sc
 Stagehand::Schema.add_stagehand!(only: tables, force: true)
 ```
 
+## Upgrading from 1.2.3 to 2.0.0
+
+Stagehand 2.0.0 drops support for Rails 4.x and 5.x. The supported Rails range is now 7.0 through 8.1.
+Rails 6.x remains unsupported (support for 6.x was removed in the 1.x line).
+
+If your app still sets `config.active_record.legacy_connection_handling`, set it to `false` during upgrade steps where that option exists.
+
 ## Possible Caveats to double check when development is complete
 - A transaction is opened on the staging and production databases when syncing. This reduces the timing window where the
 sync process could be killed after the production database write, but before the staging database write had completed,
@@ -619,3 +637,27 @@ are being used.
 
 - Unsynced write detection relies on the `exec_insert`, `exec_update`, `exec_delete` methods from
 ActiveRecord::AbstractAdapter. It will not detect writes using the `execute` method.
+
+
+## Development and Testing
+
+Appraisal runs can isolate their test databases automatically. The internal test app supports an optional
+`STAGEHAND_TEST_DATABASE_SUFFIX`, and the parallel runner assigns a unique suffix per appraisal so concurrent runs use
+separate staging and production schemas.
+
+To run the appraisal matrix in parallel locally:
+
+```bash
+ruby bin/parallel_appraisal
+```
+
+The default command for each appraisal is `rake db:create spec`, which creates both Stagehand databases before running
+the suite. You can override the concurrency, appraisals, or command as needed:
+
+```bash
+ruby bin/parallel_appraisal --jobs 3 --appraisals rails-7.2,rails-8.1
+ruby bin/parallel_appraisal --command 'rspec spec/lib/staging/model_spec.rb'
+ruby bin/parallel_appraisal -- rspec spec/lib/staging/model_spec.rb
+```
+
+Environment variables (`JOBS`, `APPRAISALS`, `APPRAISAL_COMMAND`) are also supported as fallbacks.

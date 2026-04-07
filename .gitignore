@@ -8,3 +8,5 @@ spec/dummy/tmp/
 spec/dummy/.sass-cache
 *.gem
 .DS_Store
+/spec/internal/tmp
+/spec/internal/tmp/*.txt

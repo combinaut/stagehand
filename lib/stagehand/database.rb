@@ -1,9 +1,37 @@
-require 'thread'
+require 'stagehand/rails_compatibility'
 require 'stagehand/active_record_extensions'
 
 module Stagehand
   module Database
     extend self
+
+    STAGING_SHARD = :staging
+    PRODUCTION_SHARD = :production
+    private_constant :STAGING_SHARD, :PRODUCTION_SHARD
+
+    # Register shard connections on ActiveRecord::Base. Called from engine initializer.
+    def configure_shards!
+      return if Configuration.single_connection?
+
+      ActiveRecord::Base.connects_to shards: {
+        STAGING_SHARD    => { writing: Configuration.staging_connection_name },
+        PRODUCTION_SHARD => { writing: Configuration.production_connection_name }
+      }
+
+      # StagingProbe needs pools in both shards so Staging::Model classes can
+      # resolve a connection when the production shard is active.
+      StagingProbe.connects_to shards: {
+        STAGING_SHARD    => { writing: Configuration.staging_connection_name },
+        PRODUCTION_SHARD => { writing: Configuration.staging_connection_name }
+      }
+
+      # ProductionProbe needs pools in both shards so Production::Record
+      # can resolve a connection regardless of the active shard.
+      ProductionProbe.connects_to shards: {
+        STAGING_SHARD    => { writing: Configuration.production_connection_name },
+        PRODUCTION_SHARD => { writing: Configuration.production_connection_name }
+      }
+    end
 
     def transaction
       raise InvalidConnectionError, "Calling Stagehand::Database.transaction is not valid unless connected to staging" unless connected_to_staging?
@@ -12,7 +40,7 @@ module Stagehand
       attempts = 0
       output = nil
       ActiveRecord::Base.transaction do
-        Production::Record.transaction do
+        callable = proc do
           attempts += 1
 
           raise NoRetryError, "Retrying is not allowed in Stagehand::Database.transaction" if attempts > 1
@@ -20,6 +48,14 @@ module Stagehand
           output = yield
 
           success = true
+        end
+
+        # In single connection mode, skip Production::Record transaction to avoid
+        # connection issues (ProductionProbe has no dedicated pool).
+        if Configuration.single_connection?
+          callable.call
+        else
+          Production::Record.transaction(&callable)
         end
 
         raise ActiveRecord::Rollback unless success
@@ -59,12 +95,20 @@ module Stagehand
       database_name(Configuration.staging_connection_name)
     end
 
-    def staging_database_versions
-      Stagehand::Database.staging_connection.select_values(versions_scope)
+    def production_database_versions
+      if Configuration.single_connection?
+        staging_database_versions
+      else
+        with_production_connection do
+          schema_versions_for_connection
+        end
+      end
     end
 
-    def production_database_versions
-      Stagehand::Database.production_connection.select_values(versions_scope)
+    def staging_database_versions
+      with_staging_connection do
+        schema_versions_for_connection
+      end
     end
 
     def with_staging_connection(&block)
@@ -91,15 +135,22 @@ module Stagehand
 
     def swap_connection(connection_name)
       pushed = ConnectionStack.push(connection_name.to_sym)
-      cache = ActiveRecord::Base.connection_pool.query_cache_enabled
-      ActiveRecord::Base.connection_specification_name = current_connection_name
-      ActiveRecord::Base.connection_pool.enable_query_cache! if cache
-
-      yield connection_name
+      ActiveRecord::Base.connected_to(shard: shard_for_connection(connection_name), role: :writing) do
+        yield connection_name
+      end
     ensure
       ConnectionStack.pop if pushed
-      ActiveRecord::Base.connection_specification_name = current_connection_name
-      ActiveRecord::Base.connection_pool.enable_query_cache! if cache
+    end
+
+    def shard_for_connection(connection_name)
+      case connection_name.to_sym
+      when Configuration.staging_connection_name.to_sym
+        STAGING_SHARD
+      when Configuration.production_connection_name.to_sym
+        PRODUCTION_SHARD
+      else
+        raise ArgumentError, "Unknown connection name: #{connection_name}"
+      end
     end
 
     def current_connection_name
@@ -114,34 +165,26 @@ module Stagehand
       @database_configuration ||= Rails.configuration.database_configuration
     end
 
-    def versions_scope
-      ActiveRecord::SchemaMigration.order(:version)
+    def schema_versions_for_connection
+      connection = ActiveRecord::Base.connection
+      table_name = Stagehand::RailsCompatibility.schema_migration_table_name_for(connection)
+      table = connection.quote_table_name(table_name)
+      connection.select_values("SELECT version FROM #{table} ORDER BY version ASC").map(&:to_s)
+    rescue ActiveRecord::StatementInvalid
+      []
     end
 
     # CLASSES
 
     class Probe < ActiveRecord::Base
       self.abstract_class = true
-      self.stagehand_threadsafe_connections = false # We don't want to track connection per-thread for Probes
-
-      # We fake the class name so we can create a connection pool with the desired connection name instead of the name of the class
-      def self.init_connection(connection_name)
-        @probe_name = connection_name
-        establish_connection(connection_name)
-      ensure
-        @probe_name = nil
-      end
-
-      def self.name
-        @probe_name || super
-      end
     end
 
     class StagingProbe < Probe
       self.abstract_class = true
 
       def self.init_connection
-        super(Configuration.staging_connection_name)
+        establish_connection(Configuration.staging_connection_name)
       end
 
       def self.connection
@@ -159,7 +202,7 @@ module Stagehand
       self.abstract_class = true
 
       def self.init_connection
-        super(Configuration.production_connection_name)
+        establish_connection(Configuration.production_connection_name)
       end
 
       init_connection unless Configuration.single_connection?

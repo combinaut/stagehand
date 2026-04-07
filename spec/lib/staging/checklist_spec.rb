@@ -111,7 +111,7 @@ describe Stagehand::Staging::Checklist do
       end
 
       it 'includes the record if assigned during the commit via to a polymorphic association' do
-        commit = Stagehand::Staging::Commit.capture { record_1.update_attributes!(:attachable => record_2) }
+        commit = Stagehand::Staging::Commit.capture { record_1.update!(:attachable => record_2) }
         expect(klass.associated_records(commit.entries)).to include(record_2)
       end
     end
@@ -136,7 +136,7 @@ describe Stagehand::Staging::Checklist do
 
     it 'does not include entries for tables that do not exist in production' do
       user = User.new
-      commit = Stagehand::Staging::Commit.capture { record_1.update_attributes!(:user => user) }
+      commit = Stagehand::Staging::Commit.capture { record_1.update!(:user => user) }
       expect(klass.associated_records(commit.entries)).not_to include(user)
     end
   end

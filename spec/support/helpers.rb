@@ -38,7 +38,11 @@ def set_configuration(new_configuration)
       Rails.configuration.x.stagehand.send("#{option}=", value)
     end
 
-    Stagehand::Database::ProductionProbe.init_connection
+    if Stagehand::Configuration.single_connection?
+      Stagehand::Database::ProductionProbe.remove_connection
+    else
+      Stagehand::Database::ProductionProbe.init_connection
+    end
     Stagehand::Database::StagingProbe.init_connection
   end
 end
@@ -60,8 +64,17 @@ def use_then_clear_connection_for_class(klass, connection_name)
 end
 
 def set_then_clear_connection_for_class(klass, connection_name, &block)
-  klass.connection_specification_name = connection_name
-  block.call
+  klass.abstract_class = true
+  klass.connects_to shards: {
+    staging:    { writing: connection_name },
+    production: { writing: connection_name }
+  }
+  klass.abstract_class = false
+  ActiveRecord::Base.connected_to(shard: :staging, role: :writing) do
+    block.call
+  end
 ensure
-  klass.connection_specification_name = nil
+  klass.remove_connection
+  # Ensure the class falls back to ActiveRecord::Base's pool after cleanup.
+  klass.connection_specification_name = ActiveRecord::Base.connection_specification_name
 end

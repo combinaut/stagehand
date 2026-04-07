@@ -4,7 +4,7 @@ module Stagehand
       extend ActiveSupport::Concern
 
       included do
-        Stagehand::Configuration.staging_model_tables << table_name if table_name 
+        Stagehand::Configuration.staging_model_tables << table_name if table_name
       end
 
       class_methods do
@@ -23,11 +23,34 @@ module Stagehand
           end
         end
 
-        def connection
-          if Configuration.ghost_mode?
+        def connection_pool
+          if Configuration.ghost_mode? || Configuration.single_connection?
             super
           else
-            Stagehand::Database::StagingProbe.connection
+            # Keep pool lookup pinned to staging; connection() may still reuse
+            # ActiveRecord::Base.connection when a staging transaction is active.
+            ActiveRecord::Base.connected_to(shard: :staging, role: :writing) do
+              ActiveRecord::Base.connection_pool
+            end
+          end
+        end
+
+        # Rails 8.1 soft-deprecated connection in favor of connection_pool,
+        # but the adapter instance returned by connection is still used for
+        # SQL execution. Without this override, writes from association proxies
+        # (e.g. has_many#delete_all) go through the production shard's adapter,
+        # triggering UnsyncedProductionWrite.
+        def connection
+          if Configuration.ghost_mode? || Configuration.single_connection?
+            super
+          elsif Stagehand::Database.connected_to_staging? && ActiveRecord::Base.connection.transaction_open?
+            # Reuse Base's active staging transaction connection so writes stay inside
+            # the surrounding transaction (e.g. ActiveRecord::Base.transaction).
+            ActiveRecord::Base.connection
+          else
+            ActiveRecord::Base.connected_to(shard: :staging, role: :writing) do
+              ActiveRecord::Base.connection
+            end
           end
         end
       end

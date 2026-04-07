@@ -65,6 +65,7 @@ module Stagehand
         classes = ActiveRecord::Base.descendants
         classes.select! {|klass| klass.table_name == table_name }
         classes.reject! {|klass| klass < Stagehand::Database::Probe }
+        classes.reject! {|klass| klass.module_parents.include?(Stagehand::DummyClass) }
         return classes.first || table_name.classify.constantize.base_class # Try loading the class if it isn't loaded yet
       rescue NameError
         raise(IndeterminateRecordClass, "Can't determine class from table name: #{table_name}")
@@ -162,8 +163,10 @@ module Stagehand
 
       def self.build_missing_model(table_name)
         raise MissingTable, "Can't find table specified in entry: #{table_name}" unless Database.staging_connection.tables.include?(table_name)
+        class_name = table_name.classify
+        DummyClass.send(:remove_const, class_name) if DummyClass.const_defined?(class_name, false)
         klass = Class.new(ActiveRecord::Base) { self.table_name = table_name }
-        DummyClass.const_set(table_name.classify, klass)
+        DummyClass.const_set(class_name, klass)
       end
     end
   end

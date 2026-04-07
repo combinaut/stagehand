@@ -140,7 +140,7 @@ describe Stagehand::Staging::Synchronizer do
       delete_constrained_records_from_production
       updated = ConstrainedRecord.create!(:unique_number => 1)
       Stagehand::Production.save(updated)
-      updated.update_attributes!(:unique_number => 2)
+      updated.update!(:unique_number => 2)
 
       created = ConstrainedRecord.create!(:unique_number => 1)
 
@@ -330,7 +330,7 @@ describe Stagehand::Staging::Synchronizer do
       delete_constrained_records_from_production
       updated = ConstrainedRecord.create!(:unique_number => 1)
       Stagehand::Production.save(updated)
-      updated.update_attributes!(:unique_number => 2)
+      updated.update!(:unique_number => 2)
 
       created = ConstrainedRecord.create!(:unique_number => 1)
 
@@ -522,7 +522,7 @@ describe Stagehand::Staging::Synchronizer do
       Stagehand::Staging::Commit.capture do
         updated = ConstrainedRecord.create!(:unique_number => 1)
         Stagehand::Production.save(updated)
-        updated.update_attributes!(:unique_number => 2)
+        updated.update!(:unique_number => 2)
         ConstrainedRecord.create!(:unique_number => 1)
       end
 

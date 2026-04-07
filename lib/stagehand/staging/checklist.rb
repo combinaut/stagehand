@@ -94,7 +94,7 @@ module Stagehand
 
           reflections.select! do |reflection|
             begin
-              reflection.check_preloadable!
+              reflection.respond_to?(:check_preloadable!) ? reflection.check_preloadable! : reflection.check_eager_loadable!
               next true
             rescue ArgumentError
               next false

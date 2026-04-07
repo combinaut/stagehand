@@ -1,7 +1,2 @@
-require 'rubygems'
-require 'bundler'
-
-Bundler.require :default, :development
-
-Combustion.initialize! :all
-run Combustion::Application
+require_relative 'spec/internal/config/environment'
+run Rails.application
