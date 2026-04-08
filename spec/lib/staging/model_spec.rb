@@ -133,6 +133,26 @@ describe Stagehand::Staging::Model do
         end.not_to change { Klass.count }
       end
     end
+
+    context 'with configured shards' do
+      it 'returns the staging shard pool for connection_pool' do
+        expect(klass.connection_pool).to eq(ActiveRecord::Base.connection_handler.retrieve_connection_pool('ActiveRecord::Base', shard: :staging, role: :writing))
+      end
+
+      it 'returns a connection to the staging database' do
+        expect(klass.connection.current_database).to eq(staging['database'])
+      end
+    end
+
+    in_single_connection_mode do
+      it 'returns the same pool as a non-overridden class, not a shard-forced pool' do
+        expect(klass.connection_pool).to eq(SourceRecord.connection_pool)
+      end
+
+      it 'returns a connection to the staging database without using shard switching' do
+        expect(klass.connection.current_database).to eq(staging['database'])
+      end
+    end
   end
 
   describe 'staging_model_tables registration' do

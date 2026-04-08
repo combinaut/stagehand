@@ -11,7 +11,6 @@ module Stagehand
 
     # Register shard connections on ActiveRecord::Base. Called from engine initializer.
     def configure_shards!
-      return if Configuration.single_connection?
 
       ActiveRecord::Base.connects_to shards: {
         STAGING_SHARD    => { writing: Configuration.staging_connection_name },
