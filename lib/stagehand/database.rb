@@ -26,10 +26,18 @@ module Stagehand
 
       # ProductionProbe needs pools in both shards so Production::Record
       # can resolve a connection regardless of the active shard.
-      ProductionProbe.connects_to shards: {
-        STAGING_SHARD    => { writing: Configuration.production_connection_name },
-        PRODUCTION_SHARD => { writing: Configuration.production_connection_name }
-      }
+      # In single-connection mode, skip this so ProductionProbe inherits
+      # ActiveRecord::Base's pool — ensuring connection and connection_pool
+      # resolve identically (e.g. for ActiveRecord finders inside transactions).
+      # In single-connection mode, skip this so ProductionProbe inherits
+      # ActiveRecord::Base's pool — ensuring connection and connection_pool
+      # resolve identically (e.g. for ActiveRecord finders inside transactions).
+      unless Configuration.single_connection?
+        ProductionProbe.connects_to shards: {
+          STAGING_SHARD    => { writing: Configuration.production_connection_name },
+          PRODUCTION_SHARD => { writing: Configuration.production_connection_name }
+        }
+      end
     end
 
     def transaction
@@ -177,6 +185,20 @@ module Stagehand
 
     class Probe < ActiveRecord::Base
       self.abstract_class = true
+
+      # Reuse ActiveRecord::Base.connection when the current shard targets the
+      # same database as this probe, so we stay within the current transaction.
+      def self.connection
+        if connected_to_target_database?
+          ActiveRecord::Base.connection
+        else
+          super
+        end
+      end
+
+      def self.connected_to_target_database?
+        false
+      end
     end
 
     class StagingProbe < Probe
@@ -186,12 +208,8 @@ module Stagehand
         establish_connection(Configuration.staging_connection_name)
       end
 
-      def self.connection
-        if Stagehand::Database.connected_to_staging?
-          ActiveRecord::Base.connection # Reuse existing connection so we stay within the current transaction
-        else
-          super
-        end
+      def self.connected_to_target_database?
+        Stagehand::Database.connected_to_staging?
       end
 
       init_connection
@@ -202,6 +220,14 @@ module Stagehand
 
       def self.init_connection
         establish_connection(Configuration.production_connection_name)
+      end
+
+      def self.connected_to_target_database?
+        # In multi-connection mode, ProductionProbe has its own dedicated
+        # pool (via init_connection) and should always use it — return false
+        # even when connected to production so that `super` resolves through
+        # the dedicated pool.
+        Configuration.single_connection? && Stagehand::Database.connected_to_production?
       end
 
       init_connection unless Configuration.single_connection?

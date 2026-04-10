@@ -6,6 +6,32 @@ describe Stagehand::Production do
     it 'uses the same connection pool as ActiveRecord::Base' do
       expect(Stagehand::Production::Record.connection_pool).to eq(ActiveRecord::Base.connection_pool)
     end
+
+    it 'reuses ActiveRecord::Base.connection even when shard pools are registered' do
+      # Simulate boot-time state: configure_shards! registers shard pools on
+      # ProductionProbe but remove_connection is never called. Without a
+      # connection override, ProductionProbe.connection resolves to a separate
+      # pool connection, causing lock wait timeouts in transactional tests.
+      connection_name = Stagehand.configuration.production_connection_name
+      Stagehand::Database::ProductionProbe.connects_to shards: {
+        staging:    { writing: connection_name },
+        production: { writing: connection_name }
+      }
+      expect(Stagehand::Database::ProductionProbe.connection).to eq(ActiveRecord::Base.connection)
+    end
+
+    it 'can find the record after Production.save within a transaction' do
+      # Reproduces the real-world failure: DatabaseCleaner wraps each test in
+      # a transaction. Production.save inserts/updates via the overridden
+      # Record.connection, but Record.find resolves its connection through
+      # connection_pool. If ProductionProbe has its own shard pool, find uses
+      # a separate connection that cannot see the uncommitted record.
+      Stagehand::Database.configure_shards!
+      ActiveRecord::Base.transaction do
+        record = SourceRecord.create!
+        expect(Stagehand::Production.save(record)).to be_present
+      end
+    end
   end
 
   describe '::status' do

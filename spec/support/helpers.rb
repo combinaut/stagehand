@@ -38,6 +38,8 @@ def set_configuration(new_configuration)
       Rails.configuration.x.stagehand.send("#{option}=", value)
     end
 
+    Stagehand::Database.configure_shards!
+
     if Stagehand::Configuration.single_connection?
       Stagehand::Database::ProductionProbe.remove_connection
     else
