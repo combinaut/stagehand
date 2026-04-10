@@ -63,9 +63,10 @@ module Stagehand
 
       def self.infer_base_class(table_name)
         classes = ActiveRecord::Base.descendants
-        classes.select! {|klass| klass.table_name == table_name }
-        classes.reject! {|klass| klass < Stagehand::Database::Probe }
-        classes.reject! {|klass| klass.module_parents.include?(Stagehand::DummyClass) }
+        classes.select! {|klass| klass.table_name == table_name } # Only classes that use this table
+        classes.reject! {|klass| klass < Stagehand::Database::Probe } # Exclude internal Stagehand probe models
+        classes.reject! {|klass| klass.module_parents.include?(Stagehand::DummyClass) } # Exclude placeholder models built for missing classes
+        classes.sort_by! {|klass| [klass == klass.base_class ? 0 : 1, klass.name.tableize == table_name ? 0 : 1] } # Prefer base classes, then classes whose name maps to the table name
         return classes.first || table_name.classify.constantize.base_class # Try loading the class if it isn't loaded yet
       rescue NameError
         raise(IndeterminateRecordClass, "Can't determine class from table name: #{table_name}")

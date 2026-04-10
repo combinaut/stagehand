@@ -69,6 +69,16 @@ describe Stagehand::Staging::CommitEntry do
         expect(subject.record_class).to eq(record.class)
       end
 
+      it 'prefers the canonical class for a table over another class that shares the same table' do
+        # Simulate a non-STI class that shares the same table as SourceRecord
+        # (e.g. a test mock that sets `self.table_name = SourceRecord.table_name`)
+        table_squatter = Class.new(ActiveRecord::Base) { self.table_name = SourceRecord.table_name }
+        stub_const('TableSquatter', table_squatter)
+
+        record = SourceRecord.create
+        expect(subject.record_class).to eq(SourceRecord)
+      end
+
       it 'raises an exception if the record class could not be determined from the table_name' do
         entry = klass.create(:record_id => 1, :table_name => 'fake_table', :operation => :insert)
         expect { subject.record_class }.to raise_exception(Stagehand::MissingTable)
