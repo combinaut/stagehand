@@ -35,9 +35,9 @@ describe Stagehand::Database do
 
   describe Stagehand::Database::ProductionProbe do
     describe '.connected_to_target_database?' do
-      it 'returns false when connected to production' do
+      it 'returns true when connected to production' do
         Stagehand::Database.with_production_connection do
-          expect(described_class.connected_to_target_database?).to be false
+          expect(described_class.connected_to_target_database?).to be true
         end
       end
 
@@ -62,10 +62,9 @@ describe Stagehand::Database do
         end
       end
 
-      it 'returns its own connection when connected to production' do
+      it 'reuses ActiveRecord::Base.connection when connected to production' do
         Stagehand::Database.with_production_connection do
-          expect(described_class.connection).not_to eq(ActiveRecord::Base.connection)
-          expect(described_class.connection.current_database).to eq(production['database'])
+          expect(described_class.connection).to eq(ActiveRecord::Base.connection)
         end
       end
 

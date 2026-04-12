@@ -223,11 +223,7 @@ module Stagehand
       end
 
       def self.connected_to_target_database?
-        # In multi-connection mode, ProductionProbe has its own dedicated
-        # pool (via init_connection) and should always use it — return false
-        # even when connected to production so that `super` resolves through
-        # the dedicated pool.
-        Configuration.single_connection? && Stagehand::Database.connected_to_production?
+        Stagehand::Database.connected_to_production?
       end
 
       init_connection unless Configuration.single_connection?
