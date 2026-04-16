@@ -1,0 +1,31 @@
+name: Stale PR Cleanup
+
+on:
+  schedule:
+    - cron: "0 9 * * 1-5" # Weekdays at 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-pr-stale: 30
+          days-before-pr-close: 14
+          stale-pr-message: >-
+            This PR has been inactive for 30 days. It will be closed automatically
+            in 14 days if there is no further activity. Push a commit, leave a comment,
+            or remove the `stale` label to reset the timer.
+          close-pr-message: >-
+            Closed after 44 days of inactivity. If this work is still needed,
+            feel free to reopen or create a new PR.
+          stale-pr-label: stale
+          exempt-pr-labels: "pinned,do-not-close,WIP"
+          exempt-draft-pr: true
+          days-before-issue-stale: -1
+          days-before-issue-close: -1
+
