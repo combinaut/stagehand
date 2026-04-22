@@ -233,8 +233,15 @@ module Stagehand
           record = Profiler.measure(:run_sync_callbacks__entry_record) { entry.record }
           next block.call unless callbacks.present? && record
 
-          record.run_callbacks(callbacks.shift) do
-            run_sync_callbacks(entry, callbacks, &block)
+          callback_name = callbacks.shift
+          # Per-callback-name span: self_cpu here is time spent in Rails'
+          # callback dispatch plus the host app's own before/around/after
+          # hooks for this callback, excluding the nested recursion (which
+          # becomes a child span of its own).
+          Profiler.measure(:"sync_callback_dispatch__#{callback_name}") do
+            record.run_callbacks(callback_name) do
+              run_sync_callbacks(entry, callbacks, &block)
+            end
           end
         end
       end
