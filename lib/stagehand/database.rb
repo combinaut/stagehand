@@ -141,12 +141,18 @@ module Stagehand
     private
 
     def swap_connection(connection_name)
-      pushed = ConnectionStack.push(connection_name.to_sym)
-      ActiveRecord::Base.connected_to(shard: shard_for_connection(connection_name), role: :writing) do
-        yield connection_name
+      Stagehand::Staging::Synchronizer::Profiler.measure(:Database_swap_connection) do
+        pushed = ConnectionStack.push(connection_name.to_sym)
+        begin
+          Stagehand::Staging::Synchronizer::Profiler.measure(:ActiveRecord_connected_to) do
+            ActiveRecord::Base.connected_to(shard: shard_for_connection(connection_name), role: :writing) do
+              yield connection_name
+            end
+          end
+        ensure
+          ConnectionStack.pop if pushed
+        end
       end
-    ensure
-      ConnectionStack.pop if pushed
     end
 
     def shard_for_connection(connection_name)

@@ -41,6 +41,7 @@ module Stagehand
       end
 
       def self.matching(object)
+        Stagehand::Staging::Synchronizer::Profiler.measure(:CommitEntry_matching) do
         keys = Array.wrap(object).collect {|entry| Stagehand::Key.generate(entry) }.compact
         sql = []
         interpolates = []
@@ -58,16 +59,19 @@ module Stagehand
           interpolates << keys.collect(&:last)
         end
 
-        return keys.present? ? where(sql.join(' OR '), *interpolates) : none
+        next keys.present? ? where(sql.join(' OR '), *interpolates) : none
+        end
       end
 
       def self.infer_base_class(table_name)
-        classes = ActiveRecord::Base.descendants
-        classes.select! {|klass| klass.table_name == table_name } # Only classes that use this table
-        classes.reject! {|klass| klass < Stagehand::Database::Probe } # Exclude internal Stagehand probe models
-        classes.reject! {|klass| klass.module_parents.include?(Stagehand::DummyClass) } # Exclude placeholder models built for missing classes
-        classes.sort_by! {|klass| [klass == klass.base_class ? 0 : 1, klass.name.tableize == table_name ? 0 : 1] } # Prefer base classes, then classes whose name maps to the table name
-        return classes.first || table_name.classify.constantize.base_class # Try loading the class if it isn't loaded yet
+        Stagehand::Staging::Synchronizer::Profiler.measure(:CommitEntry_infer_base_class) do
+          classes = Stagehand::Staging::Synchronizer::Profiler.measure(:ActiveRecord_descendants) { ActiveRecord::Base.descendants }
+          classes.select! {|klass| klass.table_name == table_name } # Only classes that use this table
+          classes.reject! {|klass| klass < Stagehand::Database::Probe } # Exclude internal Stagehand probe models
+          classes.reject! {|klass| klass.module_parents.include?(Stagehand::DummyClass) } # Exclude placeholder models built for missing classes
+          classes.sort_by! {|klass| [klass == klass.base_class ? 0 : 1, klass.name.tableize == table_name ? 0 : 1] } # Prefer base classes, then classes whose name maps to the table name
+          next classes.first || table_name.classify.constantize.base_class # Try loading the class if it isn't loaded yet
+        end
       rescue NameError
         raise(IndeterminateRecordClass, "Can't determine class from table name: #{table_name}")
       end
@@ -76,7 +80,10 @@ module Stagehand
       validates_presence_of :table_name, :if => :record_id
 
       def record
-        @record ||= delete_operation? ? build_deleted_record : record_class.find_by_id(record_id) if record_id?
+        return @record if defined?(@record) && !@record.nil?
+        Stagehand::Staging::Synchronizer::Profiler.measure(:CommitEntry_record) do
+          @record ||= delete_operation? ? build_deleted_record : record_class.find_by_id(record_id) if record_id?
+        end
       end
 
       def control_operation?
@@ -120,7 +127,7 @@ module Stagehand
       end
 
       def record_class
-        @record_class ||= infer_class
+        @record_class ||= Stagehand::Staging::Synchronizer::Profiler.measure(:CommitEntry_record_class) { infer_class }
       rescue IndeterminateRecordClass
         @record_class ||= self.class.build_missing_model(table_name)
       end

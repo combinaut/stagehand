@@ -1,3 +1,5 @@
+require 'stagehand/staging/synchronizer/profiler'
+
 module Stagehand
   module Staging
     module Synchronizer
@@ -18,12 +20,18 @@ module Stagehand
       def sync_now(subject_record = nil, preconfirmed: false, **opts, &block)
         raise SyncBlockRequired unless block_given?
 
-        Rails.logger.info "Syncing Now (preconfirmed: #{preconfirmed})"
-        Database.transaction do
-          commit = Commit.capture(subject_record, &block)
-          next unless commit # If the commit was empty don't continue
-          checklist = Checklist.new(commit.entries)
-          sync_checklist(checklist, **opts) if preconfirmed || !checklist.requires_confirmation?
+        Profiler.auto_profile('sync_now') do
+          Profiler.measure(:sync_now) do
+            Rails.logger.info "Syncing Now (preconfirmed: #{preconfirmed})"
+            Database.transaction do
+              commit = Profiler.measure(:sync_now__commit_capture) { Commit.capture(subject_record, &block) }
+              next unless commit # If the commit was empty don't continue
+              checklist = Profiler.measure(:sync_now__checklist_build) { Checklist.new(commit.entries) }
+              if preconfirmed || !Profiler.measure(:sync_now__requires_confirmation) { checklist.requires_confirmation? }
+                sync_checklist(checklist, **opts)
+              end
+            end
+          end
         end
       end
 
@@ -38,60 +46,83 @@ module Stagehand
       end
 
       def sync(limit = nil, **opts)
-        synced_count = 0
-        deleted_count = 0
+        Profiler.auto_profile('sync') do
+          Profiler.measure(:sync) do
+            synced_count = 0
+            deleted_count = 0
 
-        Rails.logger.info "Syncing"
+            Rails.logger.info "Syncing"
 
-        Database.with_staging_connection do
-          iterate_autosyncable_entries do |entry|
-            sync_entry(entry, :callbacks => :sync, **opts)
-            synced_count += 1
+            Database.with_staging_connection do
+              iterate_autosyncable_entries do |entry|
+                sync_entry(entry, :callbacks => :sync, **opts)
+                synced_count += 1
 
-            scope = CommitEntry.matching(entry).not_in_progress
-            scope = scope.save_operations unless entry.delete_operation?
-            deleted_count += delete_without_range_locks(scope)
+                Profiler.measure(:sync__delete_stale) do
+                  scope = CommitEntry.matching(entry).not_in_progress
+                  scope = scope.save_operations unless entry.delete_operation?
+                  deleted_count += delete_without_range_locks(scope)
+                end
 
-            :stop if synced_count == limit
+                :stop if synced_count == limit
+              end
+            end
+
+            Rails.logger.info "Synced #{synced_count} entries"
+            Rails.logger.info "Removed #{deleted_count} stale entries"
+
+            synced_count
           end
         end
-
-        Rails.logger.info "Synced #{synced_count} entries"
-        Rails.logger.info "Removed #{deleted_count} stale entries"
-
-        return synced_count
       end
 
       def sync_all(**opts)
-        loop do
-          entries = CommitEntry.order(entry_sync_order_sql).limit(BATCH_SIZE).to_a
-          break unless entries.present?
+        Profiler.auto_profile('sync_all') do
+          Profiler.measure(:sync_all) do
+            loop do
+              entries = Profiler.measure(:sync_all__load_batch) do
+                CommitEntry.order(entry_sync_order_sql).limit(BATCH_SIZE).to_a
+              end
+              break unless entries.present?
 
-          latest_entries = entries.uniq(&:key)
-          latest_entries.each {|entry| sync_entry(entry, :callbacks => :sync, **opts) }
-          Rails.logger.info "Synced #{latest_entries.count} entries"
+              latest_entries = Profiler.measure(:sync_all__uniq_by_key) { entries.uniq(&:key) }
+              latest_entries.each {|entry| sync_entry(entry, :callbacks => :sync, **opts) }
+              Rails.logger.info "Synced #{latest_entries.count} entries"
 
-          deleted_count = delete_without_range_locks(CommitEntry.matching(latest_entries))
-          Rails.logger.info "Removed #{deleted_count - latest_entries.count} stale entries"
+              deleted_count = Profiler.measure(:sync_all__delete_stale) do
+                delete_without_range_locks(CommitEntry.matching(latest_entries))
+              end
+              Rails.logger.info "Removed #{deleted_count - latest_entries.count} stale entries"
+            end
+          end
         end
       end
 
       # Copies all the affected records from the staging database to the production database
       def sync_record(record, **opts)
-        sync_checklist(Checklist.new(record), **opts)
+        Profiler.auto_profile('sync_record') do
+          checklist = Profiler.measure(:sync_record__checklist_build) { Checklist.new(record) }
+          sync_checklist(checklist, **opts)
+        end
       end
 
       def sync_checklist(checklist, **opts)
-        Database.transaction do
-          checklist.syncing_entries.each do |entry|
-            if checklist.subject_entries.include?(entry)
-              sync_entry(entry, :callbacks => [:sync, :sync_as_subject], **opts)
-            else
-              sync_entry(entry, :callbacks => [:sync, :sync_as_affected], **opts)
+        Profiler.measure(:sync_checklist) do
+          Database.transaction do
+            syncing = Profiler.measure(:sync_checklist__syncing_entries) { checklist.syncing_entries }
+            subject = Profiler.measure(:sync_checklist__subject_entries) { checklist.subject_entries }
+            syncing.each do |entry|
+              if subject.include?(entry)
+                sync_entry(entry, :callbacks => [:sync, :sync_as_subject], **opts)
+              else
+                sync_entry(entry, :callbacks => [:sync, :sync_as_affected], **opts)
+              end
+            end
+
+            Profiler.measure(:sync_checklist__delete_affected) do
+              delete_without_range_locks(checklist.affected_entries)
             end
           end
-
-          delete_without_range_locks(checklist.affected_entries)
         end
       end
 
@@ -102,8 +133,14 @@ module Stagehand
       def iterate_autosyncable_entries(&block)
         current = CommitEntry.maximum(:id).to_i
 
-        while entries = autosyncable_entries("id <= #{current}").limit(BATCH_SIZE).order(entry_sync_order_sql).to_a.presence do
-          stop_requested = with_confirmed_autosyncability(entries.uniq(&:key), &block)
+        loop do
+          entries = Profiler.measure(:iterate__load_batch) do
+            autosyncable_entries("id <= #{current}").limit(BATCH_SIZE).order(entry_sync_order_sql).to_a.presence
+          end
+          break unless entries
+
+          unique = Profiler.measure(:iterate__uniq_by_key) { entries.uniq(&:key) }
+          stop_requested = with_confirmed_autosyncability(unique, &block)
           break if stop_requested
           current = entries.last.try(:id).to_i - 1
         end
@@ -119,19 +156,23 @@ module Stagehand
 
         stop_requested = false
 
-        Database.transaction do
-          # Lock the records so nothing can update them after we confirm autosyncability
-          acquire_record_locks(entries)
+        Profiler.measure(:with_confirmed_autosyncability) do
+          Database.transaction do
+            # Lock the records so nothing can update them after we confirm autosyncability
+            Profiler.measure(:acquire_record_locks) { acquire_record_locks(entries) }
 
-          # Execute the block for each entry we've confirm autosyncability
-          confirmed_ids = Set.new(autosyncable_entries.where(:id => entries).pluck(:id))
+            # Execute the block for each entry we've confirm autosyncability
+            confirmed_ids = Profiler.measure(:autosyncable_recheck) do
+              Set.new(autosyncable_entries.where(:id => entries).pluck(:id))
+            end
 
-          entries.each do |entry|
-            next unless confirmed_ids.include?(entry.id)
+            entries.each do |entry|
+              next unless confirmed_ids.include?(entry.id)
 
-            if block.call(entry) == :stop
-              stop_requested = true
-              break
+              if block.call(entry) == :stop
+                stop_requested = true
+                break
+              end
             end
           end
         end
@@ -156,21 +197,23 @@ module Stagehand
       end
 
       def sync_entry(entry, callbacks: false)
-        raise SchemaMismatch unless schemas_match?
+        Profiler.measure(:sync_entry) do
+          raise SchemaMismatch unless schemas_match?
 
-        run_sync_callbacks(entry, callbacks) do
-          next unless entry.content_operation? # Only sync records from content operations because those are the only rows that have changes
-          next if Configuration.single_connection? # Avoid deadlocking if the databases are the same. There is nothing to sync because there is only a single database
+          run_sync_callbacks(entry, callbacks) do
+            next unless entry.content_operation? # Only sync records from content operations because those are the only rows that have changes
+            next if Configuration.single_connection? # Avoid deadlocking if the databases are the same. There is nothing to sync because there is only a single database
 
-          Rails.logger.info "Synchronizing #{entry.table_name} #{entry.record_id} (#{entry.operation})"
+            Rails.logger.info "Synchronizing #{entry.table_name} #{entry.record_id} (#{entry.operation})"
 
-          if entry.delete_operation?
-            Production.delete(entry)
-          elsif entry.save_operation?
-            Production.save(entry)
+            if entry.delete_operation?
+              Profiler.measure(:sync_entry__production_delete) { Production.delete(entry) }
+            elsif entry.save_operation?
+              Profiler.measure(:sync_entry__production_save) { Production.save(entry) }
+            end
+
+            Rails.logger.info "Synchronized #{entry.table_name} #{entry.record_id} (#{entry.operation})"
           end
-
-          Rails.logger.info "Synchronized #{entry.table_name} #{entry.record_id} (#{entry.operation})"
         end
       end
 
@@ -185,23 +228,28 @@ module Stagehand
       end
 
       def run_sync_callbacks(entry, callbacks, &block)
-        callbacks = Array.wrap(callbacks.presence).dup
-        return block.call unless callbacks.present? && entry.record
+        Profiler.measure(:run_sync_callbacks) do
+          callbacks = Array.wrap(callbacks.presence).dup
+          record = Profiler.measure(:run_sync_callbacks__entry_record) { entry.record }
+          next block.call unless callbacks.present? && record
 
-        entry.record.run_callbacks(callbacks.shift) do
-          run_sync_callbacks(entry, callbacks, &block)
+          record.run_callbacks(callbacks.shift) do
+            run_sync_callbacks(entry, callbacks, &block)
+          end
         end
       end
 
       # Deletes records without acquiring range locks which have a higher likelihood of causing a deadlock.
       # See https://dev.mysql.com/doc/refman/5.6/en/innodb-locks-set.html for info on locks set by SQL statements.
       def delete_without_range_locks(commit_entries)
-        ids = commit_entries.pluck(:id)
-        ids.in_groups_of(1000, false) do |batch|
-          CommitEntry.delete(batch)
-        end
+        Profiler.measure(:delete_without_range_locks) do
+          ids = commit_entries.pluck(:id)
+          ids.in_groups_of(1000, false) do |batch|
+            CommitEntry.delete(batch)
+          end
 
-        return ids.length
+          ids.length
+        end
       end
     end
   end

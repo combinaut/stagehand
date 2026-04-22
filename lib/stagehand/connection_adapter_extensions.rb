@@ -4,11 +4,15 @@ require 'stagehand/adapter_extender'
 module Stagehand
   module Connection
     def self.with_production_writes(&block)
-      state = allow_unsynced_production_writes?
-      allow_unsynced_production_writes!(true)
-      return block.call
-    ensure
-      allow_unsynced_production_writes!(state)
+      Stagehand::Staging::Synchronizer::Profiler.measure(:Connection_with_production_writes) do
+        state = allow_unsynced_production_writes?
+        allow_unsynced_production_writes!(true)
+        begin
+          block.call
+        ensure
+          allow_unsynced_production_writes!(state)
+        end
+      end
     end
 
     def self.allow_unsynced_production_writes!(state = true)

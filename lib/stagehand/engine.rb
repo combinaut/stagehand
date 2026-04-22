@@ -11,6 +11,7 @@ module Stagehand
     # These require the rails application to be initialized because configuration variables are used
     initializer 'stagehand.load_modules' do
       require 'stagehand/cache'
+      require 'stagehand/staging/synchronizer/profiler'
       require 'stagehand/key'
       require 'stagehand/database'
       require 'stagehand/connection_adapter_extensions'

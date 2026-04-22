@@ -16,32 +16,38 @@ module Stagehand
     end
 
     def save(staging_record, table_name = nil)
-      attributes = staging_record_attributes(staging_record, table_name)
+      Stagehand::Staging::Synchronizer::Profiler.measure(:Production_save) do
+        attributes = Stagehand::Staging::Synchronizer::Profiler.measure(:Production_save__staging_attrs) do
+          staging_record_attributes(staging_record, table_name)
+        end
 
-      return unless attributes.present?
+        next unless attributes.present?
 
-      write(staging_record, attributes, table_name)
+        write(staging_record, attributes, table_name)
+      end
     end
 
     def write(staging_record, attributes, table_name = nil)
-      table_name, id = Stagehand::Key.generate(staging_record, :table_name => table_name)
+      Stagehand::Staging::Synchronizer::Profiler.measure(:Production_write) do
+        table_name, id = Stagehand::Key.generate(staging_record, :table_name => table_name)
 
-      production_record = Connection.with_production_writes do
-        prepare_to_modify(table_name)
+        Connection.with_production_writes do
+          prepare_to_modify(table_name)
 
-        if update(table_name, id, attributes).nonzero?
-          Record.find(id)
-        else
-          Record.find(insert(table_name, attributes))
+          if Stagehand::Staging::Synchronizer::Profiler.measure(:Production_update) { update(table_name, id, attributes) }.nonzero?
+            Record.find(id)
+          else
+            Record.find(Stagehand::Staging::Synchronizer::Profiler.measure(:Production_insert) { insert(table_name, attributes) })
+          end
         end
       end
-
-      return production_record
     end
 
     def delete(staging_record, table_name = nil)
-      Connection.with_production_writes do
-        matching(staging_record, table_name).delete_all
+      Stagehand::Staging::Synchronizer::Profiler.measure(:Production_delete) do
+        Connection.with_production_writes do
+          matching(staging_record, table_name).delete_all
+        end
       end
     end
 
@@ -114,12 +120,16 @@ module Stagehand
     end
 
     def prepare_to_modify(table_name)
-      raise "Can't prepare to modify production records without knowning the table_name" unless table_name.present?
+      Stagehand::Staging::Synchronizer::Profiler.measure(:Production_prepare_to_modify) do
+        raise "Can't prepare to modify production records without knowning the table_name" unless table_name.present?
 
-      return if Record.table_name == table_name
+        next if Record.table_name == table_name
 
-      Record.table_name = table_name
-      Record.reset_column_information
+        Stagehand::Staging::Synchronizer::Profiler.measure(:Production_reset_column_information) do
+          Record.table_name = table_name
+          Record.reset_column_information
+        end
+      end
     end
 
     # CLASSES
