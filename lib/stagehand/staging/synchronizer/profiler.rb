@@ -11,6 +11,13 @@ module Stagehand
       #   STAGEHAND_PROFILE_SYNC=1 (env)
       #   Rails.configuration.x.stagehand.profile_sync = true
       #   Stagehand::Staging::Synchronizer::Profiler.profile { ... } (manual)
+      #
+      # For long-running syncs, set STAGEHAND_PROFILE_SEGMENT_SECONDS=10
+      # (or config.x.stagehand.profile_segment_seconds = 10) to emit per-
+      # segment delta reports every N seconds during the run. The delta
+      # reports show only the work done *since the previous segment*, so a
+      # steady slope in per-call averages across segments reveals a
+      # monotonic slowdown that a single cumulative report would hide.
       module Profiler
         extend self
 
@@ -40,14 +47,19 @@ module Stagehand
         end
 
         class Session
-          attr_reader :label, :started_at_wall, :started_at_cpu, :spans
+          attr_reader :label, :started_at_wall, :started_at_cpu, :spans, :segment_seconds
 
-          def initialize(label)
+          def initialize(label, segment_seconds: nil)
             @label = label
             @spans = {}
             @stack = []
             @started_at_wall = Profiler.wall_now
             @started_at_cpu = Profiler.cpu_now
+            @segment_seconds = segment_seconds
+            @segment_started_at_wall = @started_at_wall
+            @segment_started_at_cpu = @started_at_cpu
+            @segment_index = 0
+            @prev_snapshot = {}
           end
 
           def measure(name)
@@ -69,6 +81,7 @@ module Stagehand
               parent.child_wall += dwall
               parent.child_cpu  += dcpu
             end
+            maybe_emit_segment if @segment_seconds
           end
 
           def total_wall
@@ -99,10 +112,67 @@ module Stagehand
             lines.join("\n")
           end
 
+          # Force a segment boundary now (used when the session closes so the
+          # tail work gets its own segment report instead of being lost).
+          def flush_segment!
+            return unless @segment_seconds
+            emit_segment(final: true)
+          end
+
           private
 
           def fraction(num, denom)
             denom.zero? ? 0.0 : (num / denom)
+          end
+
+          def maybe_emit_segment
+            return if Profiler.wall_now - @segment_started_at_wall < @segment_seconds
+            emit_segment
+          end
+
+          def emit_segment(final: false)
+            now_wall = Profiler.wall_now
+            now_cpu  = Profiler.cpu_now
+            seg_wall = now_wall - @segment_started_at_wall
+            seg_cpu  = now_cpu  - @segment_started_at_cpu
+            # A flush at close with no elapsed time is redundant with the final
+            # cumulative report; skip it.
+            return if final && seg_wall < 0.001 && @spans.empty?
+
+            deltas = []
+            @spans.each do |name, span|
+              prev = @prev_snapshot[name]
+              dcount = span.count - (prev ? prev[0] : 0)
+              next if dcount.zero?
+              deltas << [
+                name,
+                dcount,
+                span.self_cpu  - (prev ? prev[1] : 0.0),
+                span.self_wall - (prev ? prev[2] : 0.0),
+                span.total_cpu  - (prev ? prev[3] : 0.0),
+                span.total_wall - (prev ? prev[4] : 0.0),
+              ]
+            end
+            deltas.sort_by! {|_, _, self_cpu, _, _, _| -self_cpu }
+
+            header = format(
+              "Stagehand Synchronizer Profile segment %d [%s] (%.1fs window at t=%.1fs): wall=%.3fs cpu=%.3fs (cpu/wall=%.0f%%)",
+              @segment_index, @label, seg_wall, now_wall - @started_at_wall,
+              seg_wall, seg_cpu, fraction(seg_cpu, seg_wall) * 100
+            )
+            table = format("  %-48s %8s %12s %12s %12s %12s %12s",
+                           "span", "count", "self_cpu", "self_wall", "tot_cpu", "tot_wall", "avg_self_cpu")
+            rows = deltas.map do |name, count, self_cpu, self_wall, total_cpu, total_wall|
+              format("  %-48s %8d %11.3fs %11.3fs %11.3fs %11.3fs %10.3fms",
+                     name.to_s, count, self_cpu, self_wall, total_cpu, total_wall,
+                     count.zero? ? 0.0 : (self_cpu / count) * 1000)
+            end
+            Profiler.emit_lines([header, table, *rows].join("\n"))
+
+            @prev_snapshot = @spans.transform_values {|s| [s.count, s.self_cpu, s.self_wall, s.total_cpu, s.total_wall] }
+            @segment_index += 1
+            @segment_started_at_wall = now_wall
+            @segment_started_at_cpu = now_cpu
           end
         end
 
@@ -116,17 +186,18 @@ module Stagehand
 
         # Wraps a block in a profiling session. Nested calls reuse the outer
         # session so per-span totals aggregate over the whole run.
-        def profile(label = 'manual', &block)
+        def profile(label = 'manual', segment_seconds: nil, &block)
           if active?
             return block.call(current)
           end
 
-          session = Session.new(label)
+          session = Session.new(label, segment_seconds: segment_seconds)
           Thread.current.thread_variable_set(SESSION_KEY, session)
           begin
             block.call(session)
           ensure
             Thread.current.thread_variable_set(SESSION_KEY, nil)
+            session.flush_segment!
             emit(session)
           end
         end
@@ -136,7 +207,18 @@ module Stagehand
         # session is already open (nested call) or if profiling is disabled.
         def auto_profile(label, &block)
           return block.call unless enabled?
-          profile(label) { block.call }
+          profile(label, segment_seconds: segment_seconds_from_config) { block.call }
+        end
+
+        def segment_seconds_from_config
+          env = ENV['STAGEHAND_PROFILE_SEGMENT_SECONDS']
+          return env.to_f if env && env.to_f > 0
+          return nil unless defined?(Rails) && Rails.respond_to?(:configuration)
+          value = Rails.configuration.x.stagehand.profile_segment_seconds
+          return value.to_f if value && value.to_f > 0
+          nil
+        rescue NoMethodError
+          nil
         end
 
         def measure(name, &block)
@@ -162,7 +244,10 @@ module Stagehand
         end
 
         def emit(session)
-          message = session.report
+          emit_lines(session.report)
+        end
+
+        def emit_lines(message)
           if defined?(Rails) && Rails.respond_to?(:logger) && Rails.logger
             Rails.logger.info(message)
           else
