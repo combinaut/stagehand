@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    combinaut_stagehand (2.0.0)
+    combinaut_stagehand (2.0.1)
       mysql2
       rails (>= 7.0, < 8.2)
       ruby-graphviz
