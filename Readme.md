@@ -639,6 +639,13 @@ are being used.
 ActiveRecord::AbstractAdapter. It will not detect writes using the `execute` method.
 
 
+## Bundled Rails Patches
+
+Stagehand prepends a small workaround to `ActiveModel::AttributeMethods::ClassMethods#alias_attribute` on Rails 7.1 and later. The upstream method appends to `aliases_by_attribute_name[old_name]` without checking for duplicates, and Rails 7.1 also started auto-registering `alias_attribute :id_value, :id` on every schema load. Since Stagehand's `Production::Record` swaps `table_name` per target table during sync, the `aliases_by_attribute_name["id"]` array grows without bound and subsequent queries pay quadratically-growing method-generation cost. Our workaround short-circuits `alias_attribute` when the same alias is already registered.
+
+The patch loads only on Rails 7.1+ (feature-detected via `ActiveModel::AttributeMethods::ClassMethods.method_defined?(:aliases_by_attribute_name)`); Rails 7.0 is untouched. Upstream fix: <https://github.com/rails/rails/pull/57227>. Remove `lib/stagehand/active_model_alias_attribute_patch.rb` (and its `require` in `engine.rb`) once Stagehand's minimum Rails version contains the upstream fix.
+
+
 ## Development and Testing
 
 Appraisal runs can isolate their test databases automatically. The internal test app supports an optional

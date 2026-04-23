@@ -10,6 +10,7 @@ module Stagehand
 
     # These require the rails application to be initialized because configuration variables are used
     initializer 'stagehand.load_modules' do
+      require 'stagehand/active_model_alias_attribute_patch'
       require 'stagehand/cache'
       require 'stagehand/key'
       require 'stagehand/database'
