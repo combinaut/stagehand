@@ -241,15 +241,79 @@ describe Stagehand::Staging::Synchronizer do
       expect(statuses.count(:not_modified)).to eq(1)
     end
 
-    it 'can handle many autosyncable commit entries' do
-      count = 100_000
-      table_name = SourceRecord.table_name
-      operation = Stagehand::Staging::CommitEntry::INSERT_OPERATION
-      values = count.times.collect {|index| "(#{index},'#{table_name}','#{operation}')" }.join(',')
-      insert = "INSERT INTO #{Stagehand::Staging::CommitEntry.table_name} (record_id,table_name,operation) VALUES#{values};"
-      ActiveRecord::Base.connection.execute(insert)
+    it 'can handle many autosyncable commit entries from a single table' do
+      # Throughput stress test: sync 1000 entries from a 100k-entry backlog,
+      # all from the same table. Uses real sandbox records so every sync
+      # iteration does the full per-entry work (materialize + write to
+      # production + stale-dedup), not just the iteration/dedup loop. Pairs
+      # with the alternating-tables variant below — same workload, same
+      # budget, only the table-switching dimension differs.
+      sync_count = 1000
+      backlog = 100_000
+      SourceRecord.insert_all(Array.new(sync_count) { { name: 'seed' } })
+      source_ids = SourceRecord.order(:id).last(sync_count).pluck(:id)
+      Stagehand::Staging::CommitEntry.delete_all # discard any auto-generated entries from the seeding above
 
-      expect { subject.sync(1000) }.to take_less_than(10).seconds
+      operation = Stagehand::Staging::CommitEntry::INSERT_OPERATION
+      unique_entries = source_ids.map do |id|
+        { record_id: id, table_name: SourceRecord.table_name, operation: operation }
+      end
+      # Pad with duplicates so the sync drains a realistic backlog on top of
+      # its per-entry work (stale duplicates get cleared out by sync, but
+      # they still cost something to iterate past).
+      entries = (unique_entries * (backlog.to_f / unique_entries.length).ceil).first(backlog)
+      Stagehand::Staging::CommitEntry.insert_all(entries)
+
+      # `samples: 1, warmup: 0` because the first sync drains the queue
+      # (stale dedup removes the duplicates), so subsequent samples would
+      # see nothing to sync and trivially pass the budget regardless of a
+      # regression.
+      expect { subject.sync(sync_count) }
+        .to take_less_than(10).seconds.over({ samples: 1, warmup: 0, discard_outliers: false })
+    end
+
+    it 'can handle many autosyncable commit entries that alternate across tables' do
+      # Same workload as the single-table variant (1000 syncs, 100k backlog)
+      # so the two are apples-to-apples — the only variable is that entries
+      # here alternate between two tables. Every sync iteration swaps
+      # `Production::Record.table_name=` *and* materializes an AR row, which
+      # is the only combination that stresses `reset_column_information` +
+      # lazy schema reload end-to-end. This is where the Rails 7.1+
+      # `alias_attribute` duplicate-accumulation regression
+      # (https://github.com/rails/rails/issues/57235) would blow up if
+      # unpatched — the alias list grows with each table switch and
+      # `define_attribute_methods` degrades quadratically. We patch this
+      # downstream; the timing budget guards against the regression on all
+      # Rails versions, and the alias-count assertion below adds a
+      # deterministic guard on Rails 7.1+.
+      sync_count = 1000
+      backlog = 100_000
+      per_table = sync_count / 2
+      SourceRecord.insert_all(Array.new(per_table) { { name: 'seed' } })
+      TargetAssignment.insert_all(Array.new(per_table) { { target_id: 0 } })
+      source_ids = SourceRecord.order(:id).last(per_table).pluck(:id)
+      target_ids = TargetAssignment.order(:id).last(per_table).pluck(:id)
+      Stagehand::Staging::CommitEntry.delete_all
+
+      operation = Stagehand::Staging::CommitEntry::INSERT_OPERATION
+      unique_entries = source_ids.zip(target_ids).flat_map do |source_id, target_id|
+        [
+          { record_id: source_id, table_name: SourceRecord.table_name, operation: operation },
+          { record_id: target_id, table_name: TargetAssignment.table_name, operation: operation }
+        ]
+      end
+      entries = (unique_entries * (backlog.to_f / unique_entries.length).ceil).first(backlog)
+      Stagehand::Staging::CommitEntry.insert_all(entries)
+
+      expect { subject.sync(sync_count) }
+        .to take_less_than(25).seconds.over({ samples: 1, warmup: 0, discard_outliers: false })
+
+      # Rails 7.0 predates `aliases_by_attribute_name`; on 7.1+ the alias
+      # list should never grow past a single entry for `id_value`.
+      if ActiveModel::AttributeMethods::ClassMethods.method_defined?(:aliases_by_attribute_name)
+        aliases = Stagehand::Production::Record.send(:aliases_by_attribute_name).fetch('id', [])
+        expect(aliases.count('id_value')).to eq(1)
+      end
     end
 
     it 'does not raise an exception if there are no records to sync' do
