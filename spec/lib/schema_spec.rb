@@ -33,10 +33,20 @@ describe Stagehand::Schema do
     # Locked to literals because triggers are created by one process and looked up and dropped by another, so the name
     # a table maps to has to be stable across processes and releases. Changing the truncation or the digest orphans
     # every trigger already created for a table name over the limit, and `drop_trigger` fails silently when it happens.
-    it 'appends a digest of the untruncated name to the truncated name' do
-      expect(trigger_name(long_table_name, 'insert')).to eq('stagehand_insert_trigger_records_with_an_extremely_long_8017cd4a')
-      expect(trigger_name(long_table_name, 'update')).to eq('stagehand_update_trigger_records_with_an_extremely_long_2576aa2e')
-      expect(trigger_name(long_table_name, 'delete')).to eq('stagehand_delete_trigger_records_with_an_extremely_long_94ac3fe5')
+    it 'appends a digest of the table name to the truncated name' do
+      expect(trigger_name(long_table_name, 'insert')).to eq('stagehand_insert_trigger_records_with_an_extremely_long_ac31321f')
+      expect(trigger_name(long_table_name, 'update')).to eq('stagehand_update_trigger_records_with_an_extremely_long_ac31321f')
+      expect(trigger_name(long_table_name, 'delete')).to eq('stagehand_delete_trigger_records_with_an_extremely_long_ac31321f')
+    end
+
+    it 'digests the table name rather than the whole name, so a table\'s triggers share a digest' do
+      digests = %w[insert update delete].collect {|event| trigger_name(long_table_name, event).last(Stagehand::Schema::TRIGGER_NAME_DIGEST_LENGTH) }
+
+      expect(digests.uniq.length).to eq(1)
+    end
+
+    it 'digests a long table name case insensitively, matching the downcased name' do
+      expect(trigger_name(long_table_name.upcase)).to eq(trigger_name(long_table_name))
     end
 
     it 'does not collide for long table names sharing a prefix' do
