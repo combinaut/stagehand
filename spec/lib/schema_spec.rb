@@ -30,6 +30,15 @@ describe Stagehand::Schema do
       expect(trigger_name(long_table_name)).to start_with('stagehand_insert_trigger_')
     end
 
+    # Locked to literals because triggers are created by one process and looked up and dropped by another, so the name
+    # a table maps to has to be stable across processes and releases. Changing the truncation or the digest orphans
+    # every trigger already created for a table name over the limit, and `drop_trigger` fails silently when it happens.
+    it 'appends a digest of the untruncated name to the truncated name' do
+      expect(trigger_name(long_table_name, 'insert')).to eq('stagehand_insert_trigger_records_with_an_extremely_long_8017cd4a')
+      expect(trigger_name(long_table_name, 'update')).to eq('stagehand_update_trigger_records_with_an_extremely_long_2576aa2e')
+      expect(trigger_name(long_table_name, 'delete')).to eq('stagehand_delete_trigger_records_with_an_extremely_long_94ac3fe5')
+    end
+
     it 'does not collide for long table names sharing a prefix' do
       expect(trigger_name("#{long_table_name}_a")).not_to eq(trigger_name("#{long_table_name}_b"))
     end
