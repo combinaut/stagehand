@@ -1,3 +1,4 @@
+require "digest"
 require "stagehand/schema/statements"
 
 module Stagehand
@@ -5,6 +6,8 @@ module Stagehand
     extend self
 
     UNTRACKED_TABLES = ['ar_internal_metadata', 'schema_migrations', 'data_migrations', Stagehand::Staging::CommitEntry.table_name]
+    MYSQL_IDENTIFIER_LIMIT = 64
+    TRIGGER_NAME_DIGEST_LENGTH = 8
 
     def init_stagehand!(**table_options)
       ActiveRecord::Schema.define do
@@ -111,8 +114,18 @@ module Stagehand
       get_triggers(table_name).present?
     end
 
+    # MySQL identifiers are limited to 64 characters, so table names longer than 39 characters overflow the limit and
+    # CREATE TRIGGER fails. Truncate to fit, appending a digest of the table name so two long table names sharing a
+    # prefix can't collide. The digest covers only the table name, not the whole trigger name, so all three of a
+    # table's triggers carry the same digest and can be told apart from a similarly named table's at a glance. The
+    # event is fully preserved in the stagehand_<event>_trigger_ prefix, which also survives truncation and is what
+    # trigger discovery matches on.
     def trigger_name(table_name, trigger_event)
-      "stagehand_#{trigger_event}_trigger_#{table_name}".downcase
+      name = "stagehand_#{trigger_event}_trigger_#{table_name}".downcase
+      return name if name.length <= MYSQL_IDENTIFIER_LIMIT
+
+      digest = Digest::MD5.hexdigest(table_name.to_s.downcase).first(TRIGGER_NAME_DIGEST_LENGTH)
+      "#{name.first(MYSQL_IDENTIFIER_LIMIT - TRIGGER_NAME_DIGEST_LENGTH - 1)}_#{digest}"
     end
 
     def get_triggers(table_name = nil)
