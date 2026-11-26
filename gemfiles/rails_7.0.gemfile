@@ -6,10 +6,6 @@ gem "appraisal"
 gem "benchmark"
 gem "rails", "~> 7.0.0"
 gem "rspec-rails", "~> 6.0"
-gem "irb", "< 1.19"
-gem "minitest", "< 6"
-gem "prism", "< 2"
-gem "rdoc", "< 7"
 
 group :development do
   gem "pry"

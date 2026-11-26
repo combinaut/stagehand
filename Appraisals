@@ -7,6 +7,7 @@ appraise "rails-7.1" do
   gem "rails", "~> 7.1.0"
   gem "rspec-rails", "~> 6.0"
   gem "ostruct"
+  gem "rdoc", "< 8"
 end
 
 appraise "rails-7.2" do
