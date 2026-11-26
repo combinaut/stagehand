@@ -117,7 +117,7 @@ GEM
     i18n (1.15.2)
       concurrent-ruby (~> 1.0)
     io-console (0.9.5)
-    irb (1.19.0)
+    irb (1.18.0)
       pp (>= 0.6.0)
       prism (>= 1.3.0)
       rdoc (>= 4.0.0)
@@ -135,9 +135,7 @@ GEM
     marcel (1.2.1)
     method_source (1.1.0)
     mini_mime (1.1.5)
-    minitest (6.1.0)
-      drb (~> 2.0)
-      prism (>= 1.5, < 3)
+    minitest (5.27.0)
     mutex_m (0.3.0)
     mysql2 (0.5.7)
       bigdecimal
@@ -159,12 +157,14 @@ GEM
     pp (0.6.4)
       prettyprint
     prettyprint (0.2.1)
-    prism (2.1.0-arm64-darwin)
-    prism (2.1.0-x86_64-linux-gnu)
+    prism (1.9.0)
     pry (0.16.1)
       coderay (~> 1.1)
       method_source (~> 1.0)
       reline (>= 0.6.0)
+    psych (5.5.0)
+      date
+      stringio
     racc (1.8.1)
     rack (3.2.9)
     rack-session (2.1.2)
@@ -206,14 +206,9 @@ GEM
       tsort (>= 0.2)
       zeitwerk (~> 2.6)
     rake (13.4.2)
-    rbs (4.2.0)
-      logger
-      prism (>= 1.6.0)
-      tsort
-    rdoc (8.1.0)
+    rdoc (6.17.0)
       erb
-      prism (>= 1.6.0)
-      rbs (>= 4.0.0)
+      psych (>= 4.0.0)
       tsort
     reline (0.7.0)
       io-console (~> 0.5)
@@ -238,6 +233,7 @@ GEM
     ruby-graphviz (1.2.5)
       rexml
     securerandom (0.4.1)
+    stringio (3.2.0)
     thor (1.5.0)
     timeout (0.6.1)
     tsort (0.2.0)
@@ -260,9 +256,13 @@ DEPENDENCIES
   benchmark
   combinaut_stagehand!
   database_cleaner
+  irb (< 1.19)
+  minitest (< 6)
   ostruct
+  prism (< 2)
   pry
   rails (~> 7.1.0)
+  rdoc (< 7)
   rspec-rails (~> 6.0)
 
 BUNDLED WITH

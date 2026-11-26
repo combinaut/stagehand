@@ -7,6 +7,10 @@ gem "benchmark"
 gem "rails", "~> 7.1.0"
 gem "rspec-rails", "~> 6.0"
 gem "ostruct"
+gem "irb", "< 1.19"
+gem "minitest", "< 6"
+gem "prism", "< 2"
+gem "rdoc", "< 7"
 
 group :development do
   gem "pry"
