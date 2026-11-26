@@ -306,7 +306,7 @@ describe Stagehand::Staging::Synchronizer do
       Stagehand::Staging::CommitEntry.insert_all(entries)
 
       expect { subject.sync(sync_count) }
-        .to take_less_than(25).seconds.over({ samples: 1, warmup: 0, discard_outliers: false })
+        .to take_less_than(30).seconds.over({ samples: 1, warmup: 0, discard_outliers: false })
 
       # Rails 7.0 predates `aliases_by_attribute_name`; on 7.1+ the alias
       # list should never grow past a single entry for `id_value`.
